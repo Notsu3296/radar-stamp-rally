@@ -1,0 +1,316 @@
+:root {
+  color-scheme: dark;
+  --bg: #08110f;
+  --panel: #10201c;
+  --panel-2: #142923;
+  --line: rgba(142, 245, 199, 0.24);
+  --text: #effaf5;
+  --muted: #9bb8ad;
+  --accent: #62e6a8;
+  --accent-2: #f6c65b;
+  --danger: #ff7b7b;
+  --shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 18% 10%, rgba(98, 230, 168, 0.14), transparent 28%),
+    linear-gradient(160deg, #08110f 0%, #111c26 48%, #151512 100%);
+  color: var(--text);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+button {
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.app-shell {
+  width: min(100%, 920px);
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 20px;
+  display: grid;
+  grid-template-rows: auto minmax(320px, 1fr) auto;
+  gap: 18px;
+}
+
+.top-bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: clamp(1.45rem, 5vw, 2.4rem);
+  letter-spacing: 0;
+}
+
+.top-bar p,
+.summary {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.icon-text-button,
+.primary-button,
+.secondary-button,
+.visit-button,
+.close-button {
+  min-height: 44px;
+  border-radius: 8px;
+  padding: 0 16px;
+  color: var(--text);
+  background: var(--panel-2);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.primary-button,
+.visit-button {
+  background: var(--accent);
+  color: #082017;
+  font-weight: 700;
+}
+
+.secondary-button {
+  color: var(--muted);
+}
+
+.radar-section {
+  display: grid;
+  place-items: center;
+  min-height: 0;
+}
+
+.radar-wrap {
+  width: min(100%, 620px);
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+}
+
+.radar {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, rgba(98, 230, 168, 0.18) 0 1px, transparent 2px 100%),
+    radial-gradient(circle at center, rgba(98, 230, 168, 0.12), rgba(8, 17, 15, 0.95) 68%);
+  background-size: 28px 28px, auto;
+  border: 1px solid rgba(98, 230, 168, 0.34);
+  box-shadow: var(--shadow), inset 0 0 42px rgba(98, 230, 168, 0.16);
+}
+
+.radar-sweep {
+  position: absolute;
+  inset: 0;
+  background: conic-gradient(from 0deg, rgba(98, 230, 168, 0.34), rgba(98, 230, 168, 0.05) 48deg, transparent 74deg);
+  animation: sweep 5s linear infinite;
+}
+
+.radar-ring,
+.radar-axis,
+.radar-center,
+.marker {
+  position: absolute;
+}
+
+.radar-ring {
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  inset: var(--inset);
+}
+
+.ring-1 {
+  --inset: 18%;
+}
+
+.ring-2 {
+  --inset: 34%;
+}
+
+.ring-3 {
+  --inset: 48%;
+}
+
+.radar-axis {
+  background: var(--line);
+}
+
+.axis-v {
+  top: 0;
+  left: 50%;
+  width: 1px;
+  height: 100%;
+}
+
+.axis-h {
+  top: 50%;
+  left: 0;
+  width: 100%;
+  height: 1px;
+}
+
+.radar-center {
+  width: 16px;
+  height: 16px;
+  top: calc(50% - 8px);
+  left: calc(50% - 8px);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 18px var(--accent);
+}
+
+.marker {
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: 50%;
+  background: var(--accent-2);
+  box-shadow: 0 0 18px rgba(246, 198, 91, 0.82);
+}
+
+.marker::after {
+  content: attr(data-name);
+  position: absolute;
+  left: 22px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: max-content;
+  max-width: 150px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(8, 17, 15, 0.78);
+  color: var(--text);
+  font-size: 0.78rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.action-panel {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 8px;
+  background: rgba(16, 32, 28, 0.9);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.notice {
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(98, 230, 168, 0.14);
+  color: var(--accent);
+}
+
+.hidden {
+  display: none;
+}
+
+.visit-actions,
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.visit-button {
+  flex: 1 1 220px;
+}
+
+.history-dialog {
+  width: min(calc(100% - 32px), 560px);
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.history-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.62);
+}
+
+.dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.close-button {
+  width: 44px;
+  padding: 0;
+  font-size: 1.4rem;
+}
+
+.history-list {
+  display: grid;
+  gap: 10px;
+  max-height: min(58vh, 520px);
+  overflow: auto;
+  padding: 16px;
+}
+
+.history-item {
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.history-item strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.empty {
+  color: var(--muted);
+}
+
+@keyframes sweep {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 620px) {
+  .app-shell {
+    padding: 14px;
+    gap: 14px;
+  }
+
+  .top-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .icon-text-button,
+  .primary-button,
+  .secondary-button {
+    width: 100%;
+  }
+
+  .marker::after {
+    max-width: 112px;
+  }
+}

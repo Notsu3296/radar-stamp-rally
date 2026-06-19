@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>位置情報ゲーム</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="top-bar">
+        <div>
+          <h1>位置情報ゲーム</h1>
+          <p id="statusText">地点データを読み込んでいます</p>
+        </div>
+        <button id="historyButton" class="icon-text-button" type="button">履歴を見る</button>
+      </header>
+
+      <section class="radar-section" aria-label="未訪問地点レーダー">
+        <div class="radar-wrap">
+          <div class="radar" id="radar">
+            <div class="radar-sweep"></div>
+            <div class="radar-ring ring-1"></div>
+            <div class="radar-ring ring-2"></div>
+            <div class="radar-ring ring-3"></div>
+            <div class="radar-axis axis-v"></div>
+            <div class="radar-axis axis-h"></div>
+            <div class="radar-center"></div>
+            <div id="radarMarkers"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="action-panel" aria-live="polite">
+        <div id="qrNotice" class="notice hidden"></div>
+        <div id="locationSummary" class="summary">現在地は未取得です。</div>
+        <div id="visitActions" class="visit-actions"></div>
+        <div class="controls">
+          <button id="locateButton" class="primary-button" type="button">現在地を更新</button>
+          <button id="resetButton" class="secondary-button" type="button">履歴をリセット</button>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="historyDialog" class="history-dialog">
+      <div class="dialog-head">
+        <h2>訪問履歴</h2>
+        <button id="closeHistoryButton" class="close-button" type="button" aria-label="閉じる">×</button>
+      </div>
+      <div id="historyList" class="history-list"></div>
+    </dialog>
+
+    <script src="app.js" defer></script>
+  </body>
+</html>
