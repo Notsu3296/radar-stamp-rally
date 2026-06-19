@@ -29,7 +29,6 @@ async function init() {
 
   try {
     state.locations = await loadLocations();
-    elements.statusText.textContent = `${state.locations.length}件の地点を読み込みました`;
     await handleQrVisit();
     render();
     requestCurrentPosition();
@@ -180,6 +179,7 @@ function getGeolocationErrorMessage(error) {
 
 function render() {
   const unvisited = state.locations.filter((location) => !isVisited(location.id));
+  elements.statusText.textContent = `未到達地点：${toFullWidthNumber(unvisited.length)}`;
   renderSummary(unvisited);
   renderRadar(unvisited);
   renderVisitActions(unvisited);
@@ -189,7 +189,7 @@ function renderSummary(unvisited) {
   if (!state.locations.length) return;
 
   if (!state.currentPosition) {
-    elements.locationSummary.textContent = `未訪問地点は${unvisited.length}件です。現在地を取得するとレーダーに方向が表示されます。`;
+    elements.locationSummary.textContent = "現在地を取得するとレーダーに方向が表示されます。";
     return;
   }
 
@@ -346,4 +346,8 @@ function toRadians(degrees) {
 
 function toDegrees(radians) {
   return radians * 180 / Math.PI;
+}
+
+function toFullWidthNumber(value) {
+  return String(value).replace(/[0-9]/g, (digit) => String.fromCharCode(digit.charCodeAt(0) + 0xfee0));
 }
