@@ -325,10 +325,16 @@ function renderRadar(unvisited) {
   elements.radarMarkers.replaceChildren();
   if (!state.currentPosition) return;
 
-  const maxDistanceMeters = RADAR_RANGES[state.radarRangeMode];
+  const locationsWithDistance = unvisited.map((location) => ({
+    location,
+    distance: getDistanceMeters(state.currentPosition, location),
+  }));
+  const farthestDistance = Math.max(0, ...locationsWithDistance.map(({ distance }) => distance));
+  const maxDistanceMeters = state.radarRangeMode === "detail"
+    ? RADAR_RANGES.detail
+    : Math.max(RADAR_RANGES.overview, farthestDistance * 1.5);
 
-  unvisited.forEach((location) => {
-    const distance = getDistanceMeters(state.currentPosition, location);
+  locationsWithDistance.forEach(({ location, distance }) => {
     const bearing = getBearingDegrees(state.currentPosition, location);
     const distanceRatio = Math.min(distance / maxDistanceMeters, 1);
     const radiusPercent = 46 * distanceRatio;
