@@ -206,39 +206,52 @@ function startPositionTracking(applyImmediately = false) {
     return;
   }
 
-  if (state.positionWatchId !== null) {
-    if (applyImmediately) applyLatestPosition();
-    return;
-  }
-
   elements.locationSummary.textContent = "現在地を取得しています...";
   elements.locationSummary.classList.remove("hidden");
-  state.positionWatchId = navigator.geolocation.watchPosition(
-    (position) => {
-      state.latestPosition = {
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-        accuracy: position.coords.accuracy,
-        timestamp: position.timestamp,
-      };
+  const options = {
+    enableHighAccuracy: true,
+    timeout: 12000,
+    maximumAge: 5000,
+  };
 
-      if (state.currentPosition === null || applyImmediately) {
-        applyLatestPosition();
-        applyImmediately = false;
-      }
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      storeLatestPosition(position);
+      applyLatestPosition();
     },
-    (error) => {
-      if (state.currentPosition === null) {
-        elements.locationSummary.textContent = getGeolocationErrorMessage(error);
-        elements.locationSummary.classList.remove("hidden");
-      }
-    },
-    {
-      enableHighAccuracy: true,
-      timeout: 12000,
-      maximumAge: 5000,
-    },
+    handlePositionError,
+    options,
   );
+
+  if (state.positionWatchId === null) {
+    state.positionWatchId = navigator.geolocation.watchPosition(
+      (position) => {
+        storeLatestPosition(position);
+        if (state.currentPosition === null || applyImmediately) {
+          applyLatestPosition();
+          applyImmediately = false;
+        }
+      },
+      handlePositionError,
+      options,
+    );
+  }
+}
+
+function storeLatestPosition(position) {
+  state.latestPosition = {
+    latitude: position.coords.latitude,
+    longitude: position.coords.longitude,
+    accuracy: position.coords.accuracy,
+    timestamp: position.timestamp,
+  };
+}
+
+function handlePositionError(error) {
+  if (state.currentPosition !== null) return;
+
+  elements.locationSummary.textContent = getGeolocationErrorMessage(error);
+  elements.locationSummary.classList.remove("hidden");
 }
 
 function applyLatestPosition() {
@@ -322,7 +335,7 @@ function positionCompassLabel(label) {
   const bearing = Number(label.dataset.bearing);
   const relativeBearing = bearing - (state.heading ?? 0);
   const angle = (relativeBearing - 90) * Math.PI / 180;
-  const radiusPercent = 54;
+  const radiusPercent = 42;
 
   label.style.left = `${50 + Math.cos(angle) * radiusPercent}%`;
   label.style.top = `${50 + Math.sin(angle) * radiusPercent}%`;

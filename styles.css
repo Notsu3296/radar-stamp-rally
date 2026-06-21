@@ -106,17 +106,17 @@ h1 {
 .compass-labels {
   position: absolute;
   inset: 0;
+  z-index: 1;
   pointer-events: none;
 }
 
 .compass-labels span {
   position: absolute;
-  z-index: 3;
   transform: translate(-50%, -50%);
-  color: var(--accent);
+  color: rgba(142, 245, 199, 0.42);
   font-size: clamp(0.8rem, 2.5vw, 1rem);
   font-weight: 800;
-  text-shadow: 0 0 10px rgba(98, 230, 168, 0.7);
+  text-shadow: 0 0 8px rgba(98, 230, 168, 0.3);
   transition: left 120ms linear, top 120ms linear;
 }
 
