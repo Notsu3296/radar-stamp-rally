@@ -10,6 +10,7 @@ const state = {
   positionWatchId: null,
   heading: null,
   orientationListening: false,
+  showLabels: false,
 };
 
 const elements = {
@@ -18,6 +19,7 @@ const elements = {
   radar: document.querySelector("#radar"),
   compassLabels: document.querySelector("#compassLabels"),
   locateButton: document.querySelector("#locateButton"),
+  labelsButton: document.querySelector("#labelsButton"),
   historyButton: document.querySelector("#historyButton"),
   resetButton: document.querySelector("#resetButton"),
   visitActions: document.querySelector("#visitActions"),
@@ -51,6 +53,7 @@ function bindEvents() {
     await startOrientationTracking(true);
     startPositionTracking(true);
   });
+  elements.labelsButton.addEventListener("click", toggleLocationLabels);
   elements.radarSweep.addEventListener("animationiteration", applyLatestPosition);
   elements.historyButton.addEventListener("click", () => {
     renderHistory();
@@ -64,6 +67,13 @@ function bindEvents() {
     saveVisits();
     render();
   });
+}
+
+function toggleLocationLabels() {
+  state.showLabels = !state.showLabels;
+  elements.radar.classList.toggle("show-labels", state.showLabels);
+  elements.labelsButton.setAttribute("aria-pressed", String(state.showLabels));
+  elements.labelsButton.textContent = state.showLabels ? "地点名を非表示" : "地点名を表示";
 }
 
 async function startOrientationTracking(fromUserGesture = false) {
@@ -311,6 +321,12 @@ function renderRadar(unvisited) {
     marker.dataset.radiusPercent = String(radiusPercent);
     marker.style.setProperty("--marker-color", location.color);
     marker.setAttribute("aria-hidden", "true");
+
+    const label = document.createElement("span");
+    label.className = "marker-label";
+    label.textContent = location.name;
+    marker.append(label);
+
     positionRadarMarker(marker);
     elements.radarMarkers.append(marker);
   });
