@@ -4,6 +4,12 @@ const RADAR_RANGES = {
   normal: 1000,
   detail: 100,
 };
+const CATEGORY_COLORS = {
+  ハンビータウン店: "#a78bfa",
+  飲食店: "#ff7b7b",
+  小売店: "#62e6a8",
+  観光地: "#f6c65b",
+};
 
 const state = {
   locations: [],
@@ -147,7 +153,7 @@ async function loadLocations() {
 
   const rows = parseCsv(await response.text());
   const [header, ...records] = rows.filter((row) => row.some(Boolean));
-  const required = ["地点名", "緯度", "経度", "判定半径", "表示色", "UUID"];
+  const required = ["地点名", "カテゴリ", "緯度", "経度", "判定半径", "表示色", "UUID"];
 
   if (!header || !required.every((name) => header.includes(name))) {
     throw new Error(`CSVには ${required.join(", ")} の列が必要です`);
@@ -158,15 +164,20 @@ async function loadLocations() {
     const latitude = Number(values["緯度"]);
     const longitude = Number(values["経度"]);
     const radius = Number(values["判定半径"]);
+    const category = values["カテゴリ"];
     const color = values["表示色"];
 
-    if (!values["地点名"] || !Number.isFinite(latitude) || !Number.isFinite(longitude) || !Number.isFinite(radius) || !/^#[0-9a-f]{6}$/i.test(color) || !values.UUID) {
+    const hasValidCategoryColor = Object.prototype.hasOwnProperty.call(CATEGORY_COLORS, category)
+      && color.toLowerCase() === CATEGORY_COLORS[category];
+
+    if (!values["地点名"] || !hasValidCategoryColor || !Number.isFinite(latitude) || !Number.isFinite(longitude) || !Number.isFinite(radius) || !values.UUID) {
       throw new Error(`CSVの${index + 2}行目に不正な値があります`);
     }
 
     return {
       id: values.UUID,
       name: values["地点名"],
+      category,
       latitude,
       longitude,
       radius,
