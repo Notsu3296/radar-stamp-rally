@@ -1,8 +1,8 @@
 const CSV_PATH = "locations.csv";
 const STORAGE_KEY = "location-game-visits";
 const RADAR_RANGES = {
-  detail: 1000,
-  overview: 5000,
+  detail: 250,
+  overview: 1000,
 };
 
 const state = {
@@ -14,7 +14,7 @@ const state = {
   heading: null,
   orientationListening: false,
   showLabels: false,
-  radarRangeMode: "detail",
+  radarRangeMode: "overview",
 };
 
 const elements = {
@@ -86,7 +86,7 @@ function toggleRadarRange() {
   const showingOverview = state.radarRangeMode === "overview";
   state.radarRangeMode = showingOverview ? "detail" : "overview";
   elements.rangeButton.setAttribute("aria-pressed", String(!showingOverview));
-  elements.rangeButton.textContent = showingOverview ? "表示範囲：詳細" : "表示範囲：広域";
+  elements.rangeButton.textContent = showingOverview ? "表示範囲：詳細" : "表示範囲：通常";
   renderRadar(state.locations.filter((location) => !isVisited(location.id)));
   updateRadarOrientation();
   pulseRadar();
@@ -325,16 +325,10 @@ function renderRadar(unvisited) {
   elements.radarMarkers.replaceChildren();
   if (!state.currentPosition) return;
 
-  const locationsWithDistance = unvisited.map((location) => ({
-    location,
-    distance: getDistanceMeters(state.currentPosition, location),
-  }));
-  const farthestDistance = Math.max(0, ...locationsWithDistance.map(({ distance }) => distance));
-  const maxDistanceMeters = state.radarRangeMode === "detail"
-    ? RADAR_RANGES.detail
-    : Math.max(RADAR_RANGES.overview, farthestDistance * 1.5);
+  const maxDistanceMeters = RADAR_RANGES[state.radarRangeMode];
 
-  locationsWithDistance.forEach(({ location, distance }) => {
+  unvisited.forEach((location) => {
+    const distance = getDistanceMeters(state.currentPosition, location);
     const bearing = getBearingDegrees(state.currentPosition, location);
     const distanceRatio = Math.min(distance / maxDistanceMeters, 1);
     const radiusPercent = 46 * distanceRatio;
