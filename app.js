@@ -7,6 +7,7 @@ const state = {
   visits: loadVisits(),
   currentPosition: null,
   heading: null,
+  continuousHeading: null,
   orientationListening: false,
 };
 
@@ -107,8 +108,17 @@ function handleOrientation(event) {
 
   if (heading === null) return;
 
-  state.heading = normalizeHeading(heading);
-  elements.radar.style.setProperty("--heading", `${state.heading}deg`);
+  const normalizedHeading = normalizeHeading(heading);
+
+  if (state.heading === null) {
+    state.continuousHeading = normalizedHeading;
+  } else {
+    const shortestDelta = ((normalizedHeading - state.heading + 540) % 360) - 180;
+    state.continuousHeading += shortestDelta;
+  }
+
+  state.heading = normalizedHeading;
+  elements.radar.style.setProperty("--heading", `${state.continuousHeading}deg`);
   elements.headingStatus.textContent = `端末の向き：${getCardinalDirection(state.heading)}`;
 }
 
