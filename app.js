@@ -6,6 +6,8 @@ const state = {
   locations: [],
   visits: loadVisits(),
   currentPosition: null,
+  latestPosition: null,
+  positionWatchId: null,
   heading: null,
   continuousHeading: null,
   orientationListening: false,
@@ -14,6 +16,7 @@ const state = {
 const elements = {
   statusText: document.querySelector("#statusText"),
   radarMarkers: document.querySelector("#radarMarkers"),
+  radarSweep: document.querySelector(".radar-sweep"),
   locateButton: document.querySelector("#locateButton"),
   historyButton: document.querySelector("#historyButton"),
   resetButton: document.querySelector("#resetButton"),
@@ -37,7 +40,7 @@ async function init() {
     state.locations = await loadLocations();
     await handleQrVisit();
     render();
-    requestCurrentPosition();
+    startPositionTracking();
   } catch (error) {
     elements.statusText.textContent = "地点データの読み込みに失敗しました";
     elements.locationSummary.textContent = error.message;
@@ -48,8 +51,9 @@ async function init() {
 function bindEvents() {
   elements.locateButton.addEventListener("click", async () => {
     await startOrientationTracking(true);
-    requestCurrentPosition();
+    startPositionTracking(true);
   });
+  elements.radarSweep.addEventListener("animationiteration", applyLatestPosition);
   elements.historyButton.addEventListener("click", () => {
     renderHistory();
     elements.historyDialog.showModal();
@@ -216,27 +220,36 @@ async function handleQrVisit() {
   showNotice(`${location.name} を訪問済みにしました。`);
 }
 
-function requestCurrentPosition() {
+function startPositionTracking(applyImmediately = false) {
   if (!navigator.geolocation) {
     elements.locationSummary.textContent = "このブラウザは位置情報に対応していません。QRコードからの記録は利用できます。";
     return;
   }
 
+  if (state.positionWatchId !== null) {
+    if (applyImmediately) applyLatestPosition();
+    return;
+  }
+
   elements.locationSummary.textContent = "現在地を取得しています...";
-  navigator.geolocation.getCurrentPosition(
+  state.positionWatchId = navigator.geolocation.watchPosition(
     (position) => {
-      state.currentPosition = {
+      state.latestPosition = {
         latitude: position.coords.latitude,
         longitude: position.coords.longitude,
         accuracy: position.coords.accuracy,
         timestamp: position.timestamp,
       };
-      render();
+
+      if (state.currentPosition === null || applyImmediately) {
+        applyLatestPosition();
+        applyImmediately = false;
+      }
     },
     (error) => {
-      state.currentPosition = null;
-      elements.locationSummary.textContent = getGeolocationErrorMessage(error);
-      render();
+      if (state.currentPosition === null) {
+        elements.locationSummary.textContent = getGeolocationErrorMessage(error);
+      }
     },
     {
       enableHighAccuracy: true,
@@ -244,6 +257,13 @@ function requestCurrentPosition() {
       maximumAge: 5000,
     },
   );
+}
+
+function applyLatestPosition() {
+  if (!state.latestPosition) return;
+
+  state.currentPosition = { ...state.latestPosition };
+  render();
 }
 
 function getGeolocationErrorMessage(error) {
