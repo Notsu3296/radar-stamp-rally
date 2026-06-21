@@ -9,14 +9,17 @@
   <body>
     <main class="app-shell">
       <header class="top-bar">
-        <div>
-          <p id="statusText">地点データを読み込んでいます。</p>
-        </div>
         <button id="historyButton" class="icon-text-button" type="button">履歴を見る</button>
       </header>
 
       <section class="radar-section" aria-label="未訪問地点レーダー">
         <div class="radar-wrap">
+          <div id="compassLabels" class="compass-labels" aria-hidden="true">
+            <span data-bearing="0">N</span>
+            <span data-bearing="90">E</span>
+            <span data-bearing="180">S</span>
+            <span data-bearing="270">W</span>
+          </div>
           <div class="radar" id="radar">
             <div class="radar-sweep"></div>
             <div class="radar-ring ring-1"></div>
@@ -33,7 +36,6 @@
       <section class="action-panel" aria-live="polite">
         <div id="qrNotice" class="notice hidden"></div>
         <div id="locationSummary" class="summary">現在地は未取得です。</div>
-        <div id="headingStatus" class="heading-status">端末の方角を取得しています。</div>
         <div id="visitActions" class="visit-actions"></div>
         <div class="controls">
           <button id="locateButton" class="primary-button" type="button">現在地・方角を更新</button>
