@@ -6,6 +6,8 @@ const state = {
   locations: [],
   visits: loadVisits(),
   currentPosition: null,
+  heading: null,
+  orientationListening: false,
 };
 
 const elements = {
@@ -16,6 +18,8 @@ const elements = {
   resetButton: document.querySelector("#resetButton"),
   visitActions: document.querySelector("#visitActions"),
   locationSummary: document.querySelector("#locationSummary"),
+  headingStatus: document.querySelector("#headingStatus"),
+  radar: document.querySelector("#radar"),
   qrNotice: document.querySelector("#qrNotice"),
   historyDialog: document.querySelector("#historyDialog"),
   closeHistoryButton: document.querySelector("#closeHistoryButton"),
@@ -26,6 +30,7 @@ init();
 
 async function init() {
   bindEvents();
+  startOrientationTracking();
 
   try {
     state.locations = await loadLocations();
@@ -40,7 +45,10 @@ async function init() {
 }
 
 function bindEvents() {
-  elements.locateButton.addEventListener("click", requestCurrentPosition);
+  elements.locateButton.addEventListener("click", async () => {
+    await startOrientationTracking(true);
+    requestCurrentPosition();
+  });
   elements.historyButton.addEventListener("click", () => {
     renderHistory();
     elements.historyDialog.showModal();
@@ -53,6 +61,64 @@ function bindEvents() {
     saveVisits();
     render();
   });
+}
+
+async function startOrientationTracking(fromUserGesture = false) {
+  if (state.orientationListening) return;
+
+  if (!("DeviceOrientationEvent" in window)) {
+    elements.headingStatus.textContent = "この端末では方角を取得できません。";
+    return;
+  }
+
+  if (typeof DeviceOrientationEvent.requestPermission === "function") {
+    if (!fromUserGesture) {
+      elements.headingStatus.textContent = "「現在地・方角を更新」を押すと端末の方角を取得します。";
+      return;
+    }
+
+    try {
+      const permission = await DeviceOrientationEvent.requestPermission();
+      if (permission !== "granted") {
+        elements.headingStatus.textContent = "端末の方角の利用が許可されていません。";
+        return;
+      }
+    } catch {
+      elements.headingStatus.textContent = "端末の方角を取得できませんでした。";
+      return;
+    }
+  }
+
+  const eventName = "ondeviceorientationabsolute" in window ? "deviceorientationabsolute" : "deviceorientation";
+  window.addEventListener(eventName, handleOrientation, true);
+  state.orientationListening = true;
+  elements.headingStatus.textContent = "端末の方角を検知しています。";
+}
+
+function handleOrientation(event) {
+  let heading = null;
+  const screenAngle = screen.orientation?.angle ?? window.orientation ?? 0;
+
+  if (Number.isFinite(event.webkitCompassHeading)) {
+    heading = event.webkitCompassHeading + screenAngle;
+  } else if (Number.isFinite(event.alpha)) {
+    heading = 360 - event.alpha + screenAngle;
+  }
+
+  if (heading === null) return;
+
+  state.heading = normalizeHeading(heading);
+  elements.radar.style.setProperty("--heading", `${state.heading}deg`);
+  elements.headingStatus.textContent = `端末の向き：${getCardinalDirection(state.heading)}`;
+}
+
+function normalizeHeading(heading) {
+  return (heading % 360 + 360) % 360;
+}
+
+function getCardinalDirection(heading) {
+  const directions = ["北", "北東", "東", "南東", "南", "南西", "西", "北西"];
+  return directions[Math.round(heading / 45) % directions.length];
 }
 
 async function loadLocations() {
@@ -197,13 +263,12 @@ function renderSummary(unvisited) {
     .map((location) => ({ location, distance: getDistanceMeters(state.currentPosition, location) }))
     .sort((a, b) => a.distance - b.distance)[0];
 
-  const accuracy = Math.round(state.currentPosition.accuracy);
   if (!nearest) {
-    elements.locationSummary.textContent = `すべての地点を訪問済みです。位置精度は約${accuracy}mです。`;
+    elements.locationSummary.textContent = "すべての地点を訪問済みです。";
     return;
   }
 
-  elements.locationSummary.textContent = `最寄りの未訪問地点は ${nearest.location.name}、約${Math.round(nearest.distance)}m先です。位置精度は約${accuracy}mです。`;
+  elements.locationSummary.textContent = `最寄りの未訪問地点は ${nearest.location.name} です。`;
 }
 
 function renderRadar(unvisited) {
@@ -225,8 +290,8 @@ function renderRadar(unvisited) {
     marker.style.left = `${left}%`;
     marker.style.top = `${top}%`;
     marker.dataset.name = location.name;
-    marker.title = `${location.name}: 約${Math.round(distance)}m`;
-    marker.addEventListener("click", () => showNotice(`${location.name}: 約${Math.round(distance)}m先`));
+    marker.title = location.name;
+    marker.addEventListener("click", () => showNotice(location.name));
     elements.radarMarkers.append(marker);
   });
 }
@@ -240,11 +305,11 @@ function renderVisitActions(unvisited) {
     .filter(({ location, distance }) => distance <= location.radius)
     .sort((a, b) => a.distance - b.distance);
 
-  reachable.forEach(({ location, distance }) => {
+  reachable.forEach(({ location }) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "visit-button";
-    button.textContent = `${location.name} を記録 (${Math.round(distance)}m)`;
+    button.textContent = `${location.name} を記録`;
     button.addEventListener("click", () => {
       recordVisit(location);
       render();
