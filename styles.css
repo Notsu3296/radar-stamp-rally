@@ -109,7 +109,6 @@ h1 {
 }
 
 .radar {
-  --heading: 0deg;
   position: relative;
   width: 100%;
   aspect-ratio: 1;
@@ -127,8 +126,6 @@ h1 {
   position: absolute;
   inset: 0;
   z-index: 2;
-  transform: rotate(calc(0deg - var(--heading)));
-  transition: transform 120ms linear;
 }
 
 .radar-sweep {
@@ -198,8 +195,7 @@ h1 {
   border-radius: 50%;
   background: var(--accent-2);
   box-shadow: 0 0 18px rgba(246, 198, 91, 0.82);
-  transform: rotate(var(--heading));
-  transition: transform 120ms linear;
+  transition: left 120ms linear, top 120ms linear;
 }
 
 .marker::after {

@@ -9,7 +9,6 @@ const state = {
   latestPosition: null,
   positionWatchId: null,
   heading: null,
-  continuousHeading: null,
   orientationListening: false,
 };
 
@@ -23,7 +22,6 @@ const elements = {
   visitActions: document.querySelector("#visitActions"),
   locationSummary: document.querySelector("#locationSummary"),
   headingStatus: document.querySelector("#headingStatus"),
-  radar: document.querySelector("#radar"),
   qrNotice: document.querySelector("#qrNotice"),
   historyDialog: document.querySelector("#historyDialog"),
   closeHistoryButton: document.querySelector("#closeHistoryButton"),
@@ -112,17 +110,8 @@ function handleOrientation(event) {
 
   if (heading === null) return;
 
-  const normalizedHeading = normalizeHeading(heading);
-
-  if (state.heading === null) {
-    state.continuousHeading = normalizedHeading;
-  } else {
-    const shortestDelta = ((normalizedHeading - state.heading + 540) % 360) - 180;
-    state.continuousHeading += shortestDelta;
-  }
-
-  state.heading = normalizedHeading;
-  elements.radar.style.setProperty("--heading", `${state.continuousHeading}deg`);
+  state.heading = normalizeHeading(heading);
+  updateRadarOrientation();
   elements.headingStatus.textContent = `端末の向き：${getCardinalDirection(state.heading)}`;
 }
 
@@ -310,20 +299,32 @@ function renderRadar(unvisited) {
     const bearing = getBearingDegrees(state.currentPosition, location);
     const distanceRatio = Math.min(distance / RADAR_MAX_DISTANCE_METERS, 1);
     const radiusPercent = 46 * distanceRatio;
-    const angle = (bearing - 90) * Math.PI / 180;
-    const left = 50 + Math.cos(angle) * radiusPercent;
-    const top = 50 + Math.sin(angle) * radiusPercent;
 
     const marker = document.createElement("button");
     marker.type = "button";
     marker.className = "marker";
-    marker.style.left = `${left}%`;
-    marker.style.top = `${top}%`;
+    marker.dataset.bearing = String(bearing);
+    marker.dataset.radiusPercent = String(radiusPercent);
     marker.dataset.name = location.name;
     marker.title = location.name;
     marker.addEventListener("click", () => showNotice(location.name));
+    positionRadarMarker(marker);
     elements.radarMarkers.append(marker);
   });
+}
+
+function updateRadarOrientation() {
+  elements.radarMarkers.querySelectorAll(".marker").forEach(positionRadarMarker);
+}
+
+function positionRadarMarker(marker) {
+  const bearing = Number(marker.dataset.bearing);
+  const radiusPercent = Number(marker.dataset.radiusPercent);
+  const relativeBearing = bearing - (state.heading ?? 0);
+  const angle = (relativeBearing - 90) * Math.PI / 180;
+
+  marker.style.left = `${50 + Math.cos(angle) * radiusPercent}%`;
+  marker.style.top = `${50 + Math.sin(angle) * radiusPercent}%`;
 }
 
 function renderVisitActions(unvisited) {
