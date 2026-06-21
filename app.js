@@ -1,8 +1,8 @@
 const CSV_PATH = "locations.csv";
 const STORAGE_KEY = "location-game-visits";
 const RADAR_RANGES = {
-  detail: 250,
-  overview: 1000,
+  normal: 1000,
+  detail: 100,
 };
 
 const state = {
@@ -14,7 +14,7 @@ const state = {
   heading: null,
   orientationListening: false,
   showLabels: false,
-  radarRangeMode: "overview",
+  radarRangeMode: "normal",
 };
 
 const elements = {
@@ -83,10 +83,10 @@ function toggleLocationLabels() {
 }
 
 function toggleRadarRange() {
-  const showingOverview = state.radarRangeMode === "overview";
-  state.radarRangeMode = showingOverview ? "detail" : "overview";
-  elements.rangeButton.setAttribute("aria-pressed", String(!showingOverview));
-  elements.rangeButton.textContent = showingOverview ? "表示範囲：詳細" : "表示範囲：通常";
+  const showingNormal = state.radarRangeMode === "normal";
+  state.radarRangeMode = showingNormal ? "detail" : "normal";
+  elements.rangeButton.setAttribute("aria-pressed", String(showingNormal));
+  elements.rangeButton.textContent = showingNormal ? "表示範囲：詳細" : "表示範囲：通常";
   renderRadar(state.locations.filter((location) => !isVisited(location.id)));
   updateRadarOrientation();
   pulseRadar();
