@@ -1,6 +1,9 @@
 const CSV_PATH = "locations.csv";
 const STORAGE_KEY = "location-game-visits";
-const RADAR_MAX_DISTANCE_METERS = 1000;
+const RADAR_RANGES = {
+  detail: 1000,
+  overview: 5000,
+};
 
 const state = {
   locations: [],
@@ -11,6 +14,7 @@ const state = {
   heading: null,
   orientationListening: false,
   showLabels: false,
+  radarRangeMode: "detail",
 };
 
 const elements = {
@@ -19,6 +23,7 @@ const elements = {
   radar: document.querySelector("#radar"),
   compassLabels: document.querySelector("#compassLabels"),
   locateButton: document.querySelector("#locateButton"),
+  rangeButton: document.querySelector("#rangeButton"),
   labelsButton: document.querySelector("#labelsButton"),
   historyButton: document.querySelector("#historyButton"),
   resetButton: document.querySelector("#resetButton"),
@@ -54,6 +59,7 @@ function bindEvents() {
     startPositionTracking(true);
   });
   elements.labelsButton.addEventListener("click", toggleLocationLabels);
+  elements.rangeButton.addEventListener("click", toggleRadarRange);
   elements.radarSweep.addEventListener("animationiteration", applyLatestPosition);
   elements.historyButton.addEventListener("click", () => {
     renderHistory();
@@ -74,6 +80,16 @@ function toggleLocationLabels() {
   elements.radar.classList.toggle("show-labels", state.showLabels);
   elements.labelsButton.setAttribute("aria-pressed", String(state.showLabels));
   elements.labelsButton.textContent = state.showLabels ? "地点名を非表示" : "地点名を表示";
+}
+
+function toggleRadarRange() {
+  const showingOverview = state.radarRangeMode === "overview";
+  state.radarRangeMode = showingOverview ? "detail" : "overview";
+  elements.rangeButton.setAttribute("aria-pressed", String(!showingOverview));
+  elements.rangeButton.textContent = showingOverview ? "表示範囲：詳細" : "表示範囲：広域";
+  renderRadar(state.locations.filter((location) => !isVisited(location.id)));
+  updateRadarOrientation();
+  pulseRadar();
 }
 
 async function startOrientationTracking(fromUserGesture = false) {
@@ -309,10 +325,12 @@ function renderRadar(unvisited) {
   elements.radarMarkers.replaceChildren();
   if (!state.currentPosition) return;
 
+  const maxDistanceMeters = RADAR_RANGES[state.radarRangeMode];
+
   unvisited.forEach((location) => {
     const distance = getDistanceMeters(state.currentPosition, location);
     const bearing = getBearingDegrees(state.currentPosition, location);
-    const distanceRatio = Math.min(distance / RADAR_MAX_DISTANCE_METERS, 1);
+    const distanceRatio = Math.min(distance / maxDistanceMeters, 1);
     const radiusPercent = 46 * distanceRatio;
 
     const marker = document.createElement("span");
