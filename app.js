@@ -1,8 +1,14 @@
 const CSV_PATH = "locations.csv";
 const STORAGE_KEY = "location-game-visits";
 const RADAR_RANGES = {
-  normal: 1000,
   detail: 100,
+  normal: 1000,
+  wide: 5000,
+};
+const RADAR_RANGE_LABELS = {
+  detail: "詳細",
+  normal: "通常",
+  wide: "広域",
 };
 const CATEGORY_COLORS = {
   ハンビータウン店: "#a78bfa",
@@ -18,9 +24,14 @@ const state = {
   latestPosition: null,
   positionWatchId: null,
   heading: null,
+  orientationSamples: [],
+  orientationSampleStartedAt: null,
   orientationListening: false,
+  orientationEventName: null,
   showLabels: false,
   radarRangeMode: "normal",
+  pendingRadarRangeMode: null,
+  visibleCategories: new Set(),
 };
 
 const elements = {
@@ -30,6 +41,13 @@ const elements = {
   compassLabels: document.querySelector("#compassLabels"),
   locateButton: document.querySelector("#locateButton"),
   rangeButton: document.querySelector("#rangeButton"),
+  rangeMenu: document.querySelector("#rangeMenu"),
+  rangeOptions: document.querySelector("#rangeOptions"),
+  rangeConfirmButton: document.querySelector("#rangeConfirmButton"),
+  categoryButton: document.querySelector("#categoryButton"),
+  categoryMenu: document.querySelector("#categoryMenu"),
+  categoryOptions: document.querySelector("#categoryOptions"),
+  categoryCloseButton: document.querySelector("#categoryCloseButton"),
   labelsButton: document.querySelector("#labelsButton"),
   historyButton: document.querySelector("#historyButton"),
   resetButton: document.querySelector("#resetButton"),
@@ -49,6 +67,8 @@ async function init() {
 
   try {
     state.locations = await loadLocations();
+    state.visibleCategories = new Set(state.locations.map((location) => location.category));
+    renderCategoryOptions();
     await handleQrVisit();
     render();
     startPositionTracking();
@@ -65,7 +85,10 @@ function bindEvents() {
     startPositionTracking(true);
   });
   elements.labelsButton.addEventListener("click", toggleLocationLabels);
-  elements.rangeButton.addEventListener("click", toggleRadarRange);
+  elements.rangeButton.addEventListener("click", toggleRangeMenu);
+  elements.rangeConfirmButton.addEventListener("click", confirmRadarRange);
+  elements.categoryButton.addEventListener("click", toggleCategoryMenu);
+  elements.categoryCloseButton.addEventListener("click", closeCategoryMenu);
   elements.radarSweep.addEventListener("animationiteration", applyLatestPosition);
   elements.historyButton.addEventListener("click", () => {
     renderHistory();
@@ -88,18 +111,116 @@ function toggleLocationLabels() {
   elements.labelsButton.textContent = state.showLabels ? "地点名を非表示" : "地点名を表示";
 }
 
-function toggleRadarRange() {
-  const showingNormal = state.radarRangeMode === "normal";
-  state.radarRangeMode = showingNormal ? "detail" : "normal";
-  elements.rangeButton.setAttribute("aria-pressed", String(showingNormal));
-  elements.rangeButton.textContent = showingNormal ? "表示範囲：詳細" : "表示範囲：通常";
-  renderRadar(state.locations.filter((location) => !isVisited(location.id)));
-  updateRadarOrientation();
+function toggleRangeMenu() {
+  const shouldOpen = elements.rangeMenu.classList.contains("hidden");
+  closeCategoryMenu();
+
+  if (!shouldOpen) {
+    closeRangeMenu();
+    return;
+  }
+
+  state.pendingRadarRangeMode = null;
+  renderRangeOptions();
+  elements.rangeMenu.classList.remove("hidden");
+  elements.rangeButton.setAttribute("aria-expanded", "true");
+}
+
+function renderRangeOptions() {
+  elements.rangeOptions.replaceChildren();
+
+  Object.keys(RADAR_RANGES)
+    .filter((mode) => mode !== state.radarRangeMode)
+    .forEach((mode) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "menu-option-button";
+      button.textContent = RADAR_RANGE_LABELS[mode];
+      button.dataset.rangeMode = mode;
+      button.addEventListener("click", () => selectPendingRadarRange(mode));
+      elements.rangeOptions.append(button);
+    });
+
+  elements.rangeConfirmButton.disabled = true;
+}
+
+function selectPendingRadarRange(mode) {
+  state.pendingRadarRangeMode = mode;
+  elements.rangeOptions.querySelectorAll("[data-range-mode]").forEach((button) => {
+    button.classList.toggle("selected", button.dataset.rangeMode === mode);
+  });
+  elements.rangeConfirmButton.disabled = false;
+}
+
+function confirmRadarRange() {
+  if (!state.pendingRadarRangeMode) return;
+
+  state.radarRangeMode = state.pendingRadarRangeMode;
+  elements.rangeButton.textContent = `表示範囲：${RADAR_RANGE_LABELS[state.radarRangeMode]}`;
+  closeRangeMenu();
+  render();
   pulseRadar();
 }
 
+function closeRangeMenu() {
+  state.pendingRadarRangeMode = null;
+  elements.rangeMenu.classList.add("hidden");
+  elements.rangeButton.setAttribute("aria-expanded", "false");
+}
+
+function toggleCategoryMenu() {
+  const shouldOpen = elements.categoryMenu.classList.contains("hidden");
+  closeRangeMenu();
+
+  if (!shouldOpen) {
+    closeCategoryMenu();
+    return;
+  }
+
+  renderCategoryOptions();
+  elements.categoryMenu.classList.remove("hidden");
+  elements.categoryButton.setAttribute("aria-expanded", "true");
+}
+
+function renderCategoryOptions() {
+  elements.categoryOptions.replaceChildren();
+  const categories = [...new Set(state.locations.map((location) => location.category))];
+
+  categories.forEach((category) => {
+    const button = document.createElement("button");
+    const isVisible = state.visibleCategories.has(category);
+    button.type = "button";
+    button.className = "menu-option-button category-option";
+    button.style.setProperty("--category-color", CATEGORY_COLORS[category]);
+    button.textContent = category;
+    button.setAttribute("aria-pressed", String(isVisible));
+    button.classList.toggle("selected", isVisible);
+    button.addEventListener("click", () => toggleCategory(category));
+    elements.categoryOptions.append(button);
+  });
+}
+
+function toggleCategory(category) {
+  if (state.visibleCategories.has(category)) {
+    state.visibleCategories.delete(category);
+  } else {
+    state.visibleCategories.add(category);
+  }
+
+  renderCategoryOptions();
+  render();
+}
+
+function closeCategoryMenu() {
+  elements.categoryMenu.classList.add("hidden");
+  elements.categoryButton.setAttribute("aria-expanded", "false");
+}
+
 async function startOrientationTracking(fromUserGesture = false) {
-  if (state.orientationListening) return;
+  if (state.orientationListening) {
+    if (fromUserGesture) resetHeadingCalibration();
+    return;
+  }
 
   if (!("DeviceOrientationEvent" in window)) {
     return;
@@ -122,6 +243,7 @@ async function startOrientationTracking(fromUserGesture = false) {
 
   const eventName = "ondeviceorientationabsolute" in window ? "deviceorientationabsolute" : "deviceorientation";
   window.addEventListener(eventName, handleOrientation, true);
+  state.orientationEventName = eventName;
   state.orientationListening = true;
 }
 
@@ -129,20 +251,69 @@ function handleOrientation(event) {
   let heading = null;
   const screenAngle = screen.orientation?.angle ?? window.orientation ?? 0;
 
-  if (Number.isFinite(event.webkitCompassHeading)) {
+  const hasReliableWebkitHeading = Number.isFinite(event.webkitCompassHeading)
+    && (!Number.isFinite(event.webkitCompassAccuracy) || event.webkitCompassAccuracy >= 0);
+  const hasAbsoluteAlpha = Number.isFinite(event.alpha)
+    && (event.absolute === true || state.orientationEventName === "deviceorientationabsolute");
+
+  if (hasReliableWebkitHeading) {
     heading = event.webkitCompassHeading + screenAngle;
-  } else if (Number.isFinite(event.alpha)) {
+  } else if (hasAbsoluteAlpha) {
     heading = 360 - event.alpha + screenAngle;
   }
 
   if (heading === null) return;
 
-  state.heading = normalizeHeading(heading);
+  const normalizedHeading = normalizeHeading(heading);
+
+  if (state.heading === null) {
+    if (state.orientationSampleStartedAt === null) {
+      state.orientationSampleStartedAt = Date.now();
+    }
+    state.orientationSamples.push(normalizedHeading);
+    const sampleDuration = Date.now() - state.orientationSampleStartedAt;
+    if (state.orientationSamples.length < 8 || sampleDuration < 600) return;
+
+    const initialHeading = getStableCircularAverage(state.orientationSamples);
+    if (initialHeading === null) {
+      state.orientationSamples = state.orientationSamples.slice(-2);
+      state.orientationSampleStartedAt = Date.now();
+      return;
+    }
+
+    state.heading = initialHeading;
+    state.orientationSamples = [];
+    state.orientationSampleStartedAt = null;
+  } else {
+    state.heading = smoothHeading(state.heading, normalizedHeading, 0.3);
+  }
+
   updateRadarOrientation();
+}
+
+function resetHeadingCalibration() {
+  state.heading = null;
+  state.orientationSamples = [];
+  state.orientationSampleStartedAt = null;
 }
 
 function normalizeHeading(heading) {
   return (heading % 360 + 360) % 360;
+}
+
+function getStableCircularAverage(headings) {
+  const vectors = headings.map((heading) => toRadians(heading));
+  const x = vectors.reduce((sum, angle) => sum + Math.cos(angle), 0) / vectors.length;
+  const y = vectors.reduce((sum, angle) => sum + Math.sin(angle), 0) / vectors.length;
+  const concentration = Math.hypot(x, y);
+
+  if (concentration < 0.75) return null;
+  return normalizeHeading(toDegrees(Math.atan2(y, x)));
+}
+
+function smoothHeading(current, next, amount) {
+  const shortestDelta = ((next - current + 540) % 360) - 180;
+  return normalizeHeading(current + shortestDelta * amount);
 }
 
 async function loadLocations() {
@@ -313,7 +484,9 @@ function getGeolocationErrorMessage(error) {
 }
 
 function render() {
-  const unvisited = state.locations.filter((location) => !isVisited(location.id));
+  const unvisited = state.locations.filter((location) => (
+    !isVisited(location.id) && state.visibleCategories.has(location.category)
+  ));
   renderSummary(unvisited);
   renderRadar(unvisited);
   updateRadarOrientation();
