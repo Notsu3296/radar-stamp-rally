@@ -208,6 +208,40 @@ h1 {
   transform: translateY(-1px);
 }
 
+.gps-accuracy-badge {
+  position: fixed;
+  left: max(16px, env(safe-area-inset-left));
+  bottom: max(18px, env(safe-area-inset-bottom));
+  z-index: 48;
+  min-height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(112, 255, 214, 0.34);
+  border-radius: 999px;
+  padding: 0 12px;
+  color: var(--muted);
+  background: rgba(6, 16, 28, 0.86);
+  box-shadow: inset 0 0 18px rgba(72, 255, 208, 0.06), 0 10px 28px rgba(0, 0, 0, 0.28);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.gps-accuracy-badge[data-level="high"] {
+  border-color: rgba(72, 255, 208, 0.68);
+  color: var(--accent);
+}
+
+.gps-accuracy-badge[data-level="medium"] {
+  border-color: rgba(255, 209, 102, 0.72);
+  color: var(--accent-2);
+}
+
+.gps-accuracy-badge[data-level="low"] {
+  border-color: rgba(255, 111, 97, 0.72);
+  color: var(--danger);
+}
+
 .radar-wrap {
   position: relative;
   width: min(86vw, 86vh, 720px);
@@ -295,7 +329,15 @@ h1 {
 }
 
 .radar.location-pulse {
-  animation: location-pulse 650ms ease-out;
+  animation: location-pulse 760ms ease-out;
+}
+
+.radar.location-pulse .radar-ring {
+  animation: ring-pulse 760ms ease-out;
+}
+
+.radar.location-pulse .radar-center {
+  animation: center-pulse 760ms ease-out;
 }
 
 #radarMarkers {
@@ -758,6 +800,30 @@ h1 {
   line-height: 1.7;
 }
 
+.guide-list {
+  display: grid;
+  gap: 12px;
+}
+
+.guide-item {
+  display: grid;
+  gap: 6px;
+  border: 1px solid rgba(112, 255, 214, 0.22);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(6, 16, 28, 0.52);
+}
+
+.guide-item strong {
+  color: var(--accent-2);
+  font-size: 1rem;
+}
+
+.guide-item p {
+  color: var(--muted);
+  line-height: 1.65;
+}
+
 .qr-scanner {
   display: grid;
   gap: 14px;
@@ -1029,6 +1095,7 @@ h1 {
 
 @keyframes location-pulse {
   0% {
+    filter: brightness(1);
     box-shadow:
       inset 0 0 0 1px rgba(255, 255, 255, 0.04),
       inset 0 0 42px rgba(72, 255, 208, 0.08),
@@ -1036,19 +1103,46 @@ h1 {
       0 0 0 9px rgba(112, 255, 214, 0.28);
   }
   35% {
+    filter: brightness(1.45);
     box-shadow:
-      inset 0 0 0 1px rgba(255, 255, 255, 0.08),
-      inset 0 0 64px rgba(72, 255, 208, 0.18),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.24),
+      inset 0 0 72px rgba(72, 255, 208, 0.34),
       0 0 0 8px rgba(8, 22, 35, 0.98),
-      0 0 0 9px rgba(255, 209, 102, 0.8),
-      0 0 34px rgba(72, 255, 208, 0.42);
+      0 0 0 10px rgba(255, 209, 102, 0.92),
+      0 0 46px rgba(72, 255, 208, 0.82);
   }
   100% {
+    filter: brightness(1);
     box-shadow:
       inset 0 0 0 1px rgba(255, 255, 255, 0.04),
       inset 0 0 42px rgba(72, 255, 208, 0.08),
       0 0 0 8px rgba(8, 22, 35, 0.98),
       0 0 0 9px rgba(112, 255, 214, 0.28);
+  }
+}
+
+@keyframes ring-pulse {
+  0% {
+    border-color: rgba(112, 255, 214, 0.18);
+  }
+  35% {
+    border-color: rgba(255, 209, 102, 0.75);
+  }
+  100% {
+    border-color: rgba(112, 255, 214, 0.18);
+  }
+}
+
+@keyframes center-pulse {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.9);
+    box-shadow: 0 0 26px rgba(72, 255, 208, 1);
+  }
+  100% {
+    transform: scale(1);
   }
 }
 

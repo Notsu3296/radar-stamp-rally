@@ -60,6 +60,7 @@ const elements = {
   detailBody: document.querySelector("#detailBody"),
   rangeSlider: document.querySelector("#rangeSlider"),
   rangeModeLabel: document.querySelector("#rangeModeLabel"),
+  gpsAccuracyBadge: document.querySelector("#gpsAccuracyBadge"),
   qrNotice: null,
   locationSummary: null,
   visitActions: null,
@@ -153,9 +154,9 @@ function closeDetailPanel() {
 function renderDetailPanel(section) {
   elements.detailBody.replaceChildren();
 
-  if (section === "status") {
-    elements.detailTitle.textContent = "記録状況";
-    renderStatusDetail();
+  if (section === "guide") {
+    elements.detailTitle.textContent = "楽しみ方";
+    renderGuideDetail();
   } else if (section === "category") {
     elements.detailTitle.textContent = "カテゴリ表示";
     renderCategoryDetail();
@@ -292,7 +293,7 @@ function handleScannedQrValue(rawValue) {
   const wasVisited = isVisited(location.id);
   recordVisit(location);
   render();
-  showCheckinDetail(location, wasVisited);
+  showCheckinDetail(location, wasVisited, "radar");
 }
 
 function extractUuidFromQrValue(rawValue) {
@@ -313,7 +314,7 @@ function findLocationByUuid(uuid) {
   return state.locations.find((item) => item.id.toLowerCase() === uuid.toLowerCase());
 }
 
-function showCheckinDetail(location, wasVisited = false) {
+function showCheckinDetail(location, wasVisited = false, returnTo = "radar") {
   stopQrScanner();
   state.activeDetailSection = "checkin";
   elements.detailTitle.textContent = wasVisited ? "チェックイン済み" : "チェックイン完了";
@@ -356,14 +357,20 @@ function showCheckinDetail(location, wasVisited = false) {
     ? "訪問履歴に同じ記録があります。引き続きレーダー探索を続けましょう。"
     : "訪問履歴に記録しました。探索データを更新しました。";
 
-  const backToRadar = document.createElement("button");
-  backToRadar.type = "button";
-  backToRadar.className = "primary-button";
-  backToRadar.textContent = "レーダーに戻る";
-  backToRadar.addEventListener("click", closeDetailPanel);
+  const backButton = document.createElement("button");
+  backButton.type = "button";
+  backButton.className = "primary-button";
+  backButton.textContent = returnTo === "history" ? "地点履歴に戻る" : "レーダーに戻る";
+  backButton.addEventListener("click", () => {
+    if (returnTo === "history") {
+      openDetailPanel("history");
+      return;
+    }
+    closeDetailPanel();
+  });
 
   card.append(burst, badge, status, message, name, category, note);
-  elements.detailBody.append(card, backToRadar);
+  elements.detailBody.append(card, backButton);
 }
 
 function stopQrScanner() {
@@ -387,14 +394,32 @@ function getCameraErrorMessage(error) {
   return "カメラを起動できませんでした。";
 }
 
-function renderStatusDetail() {
-  ensureStatusElements();
+function renderGuideDetail() {
+  const guide = document.createElement("div");
+  guide.className = "guide-list";
 
-  const help = document.createElement("p");
-  help.className = "detail-note";
-  help.textContent = "現在地の更新は画面下部の照準アイコンから行えます。近くの地点に入ると、この画面に記録ボタンが表示されます。";
+  const items = [
+    ["レーダーを見る", "未訪問スポットがレーダーに表示されます。表示範囲バーで、詳細・通常・広域を切り替えられます。"],
+    ["現在地を更新", "画面右下の照準アイコンで、現在地と方角を更新します。GPS精度は画面左下に表示されます。"],
+    ["QRでチェックイン", "建物内やGPSが不安定な場所では、上部のQR CHECK-INからチェックインします。"],
+    ["カードを集める", "チェックインした地点は地点履歴に残り、メダルカードをいつでも見返せます。"],
+  ];
 
-  elements.detailBody.append(elements.qrNotice, elements.locationSummary, elements.visitActions, help);
+  items.forEach(([title, text]) => {
+    const item = document.createElement("section");
+    item.className = "guide-item";
+
+    const heading = document.createElement("strong");
+    heading.textContent = title;
+
+    const body = document.createElement("p");
+    body.textContent = text;
+
+    item.append(heading, body);
+    guide.append(item);
+  });
+
+  elements.detailBody.append(guide);
 }
 
 function renderCategoryDetail() {
@@ -510,7 +535,7 @@ function renderHistoryDetail() {
       item.append(medal, content);
       item.addEventListener("click", () => {
         if (location) {
-          showCheckinDetail(location, true);
+          showCheckinDetail(location, true, "history");
         } else {
           elements.detailTitle.textContent = "地点履歴";
           elements.detailBody.replaceChildren();
@@ -765,7 +790,7 @@ async function handleQrVisit() {
 
   const wasVisited = isVisited(location.id);
   recordVisit(location);
-  showCheckinDetail(location, wasVisited);
+  showCheckinDetail(location, wasVisited, "radar");
 }
 
 function startPositionTracking(applyImmediately = false) {
@@ -820,6 +845,8 @@ function handlePositionError(error) {
 
   elements.locationSummary.textContent = getGeolocationErrorMessage(error);
   elements.locationSummary.classList.remove("hidden");
+  elements.gpsAccuracyBadge.textContent = "GPS 取得失敗";
+  elements.gpsAccuracyBadge.dataset.level = "low";
 }
 
 function applyLatestPosition() {
@@ -827,6 +854,7 @@ function applyLatestPosition() {
 
   state.currentPosition = { ...state.latestPosition };
   render();
+  updateGpsAccuracyBadge();
   pulseRadar();
 }
 
@@ -841,6 +869,32 @@ function getGeolocationErrorMessage(error) {
   if (error.code === error.POSITION_UNAVAILABLE) return "現在地を取得できませんでした。屋内ではQRコードから記録してください。";
   if (error.code === error.TIMEOUT) return "現在地の取得がタイムアウトしました。もう一度お試しください。";
   return "現在地を取得できませんでした。";
+}
+
+function updateGpsAccuracyBadge() {
+  if (!state.currentPosition) {
+    elements.gpsAccuracyBadge.textContent = "GPS 未取得";
+    elements.gpsAccuracyBadge.dataset.level = "unknown";
+    return;
+  }
+
+  const accuracy = state.currentPosition.accuracy;
+  if (!Number.isFinite(accuracy)) {
+    elements.gpsAccuracyBadge.textContent = "GPS 精度不明";
+    elements.gpsAccuracyBadge.dataset.level = "unknown";
+    return;
+  }
+
+  const roundedAccuracy = Math.round(accuracy);
+  const level = getGpsAccuracyLevel(accuracy);
+  elements.gpsAccuracyBadge.textContent = `GPS ${level.label}・約${roundedAccuracy}m`;
+  elements.gpsAccuracyBadge.dataset.level = level.key;
+}
+
+function getGpsAccuracyLevel(accuracy) {
+  if (accuracy <= 20) return { key: "high", label: "受信状況 高" };
+  if (accuracy <= 60) return { key: "medium", label: "受信状況 普通" };
+  return { key: "low", label: "受信状況 低" };
 }
 
 function render() {
