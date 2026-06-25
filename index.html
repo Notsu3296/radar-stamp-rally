@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>レーダー</title>
-    <link rel="stylesheet" href="styles.css?v=20260625-3">
+    <link rel="stylesheet" href="styles.css?v=20260625-4">
   </head>
   <body>
     <main class="app-shell">
@@ -56,14 +56,18 @@
           <button id="closeMenuButton" class="close-button" type="button" aria-label="メニューを閉じる">×</button>
         </div>
         <div class="controls">
-          <button class="secondary-button menu-item-button" type="button" data-detail="status">現在地・記録</button>
+          <button class="secondary-button menu-item-button" type="button" data-detail="status">記録状況</button>
           <button class="secondary-button menu-item-button" type="button" data-detail="category">カテゴリ表示</button>
           <button class="secondary-button menu-item-button" type="button" data-detail="labels">地点名表示</button>
-          <button class="secondary-button menu-item-button" type="button" data-detail="history">訪問履歴</button>
+          <button class="secondary-button menu-item-button" type="button" data-detail="history">地点履歴</button>
           <button class="secondary-button menu-item-button" type="button" data-detail="reset">履歴リセット</button>
         </div>
       </section>
       <div id="menuBackdrop" class="menu-backdrop" hidden></div>
+
+      <button id="locateIconButton" class="locate-icon-button" type="button" aria-label="現在地と方角を更新">
+        <span aria-hidden="true">⌖</span>
+      </button>
 
       <section id="detailPanel" class="detail-panel hidden" aria-live="polite" aria-label="メニュー詳細">
         <div class="detail-window">
@@ -80,6 +84,6 @@
       <div id="detailBackdrop" class="detail-backdrop" hidden></div>
     </main>
 
-    <script src="app.js?v=20260625-3" defer></script>
+    <script src="app.js?v=20260625-4" defer></script>
   </body>
 </html>

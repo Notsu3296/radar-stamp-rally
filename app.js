@@ -51,6 +51,7 @@ const elements = {
   actionPanel: document.querySelector("#actionPanel"),
   menuBackdrop: document.querySelector("#menuBackdrop"),
   qrScanButton: document.querySelector("#qrScanButton"),
+  locateIconButton: document.querySelector("#locateIconButton"),
   menuItemButtons: document.querySelectorAll("[data-detail]"),
   detailPanel: document.querySelector("#detailPanel"),
   detailBackdrop: document.querySelector("#detailBackdrop"),
@@ -87,6 +88,7 @@ async function init() {
 function bindEvents() {
   elements.menuButton.addEventListener("click", openMenu);
   elements.qrScanButton.addEventListener("click", openQrScanner);
+  elements.locateIconButton.addEventListener("click", updateCurrentLocation);
   elements.closeMenuButton.addEventListener("click", closeMenu);
   elements.menuBackdrop.addEventListener("click", closeMenu);
   elements.closeDetailButton.addEventListener("click", closeDetailPanel);
@@ -152,7 +154,7 @@ function renderDetailPanel(section) {
   elements.detailBody.replaceChildren();
 
   if (section === "status") {
-    elements.detailTitle.textContent = "現在地・記録";
+    elements.detailTitle.textContent = "記録状況";
     renderStatusDetail();
   } else if (section === "category") {
     elements.detailTitle.textContent = "カテゴリ表示";
@@ -161,7 +163,7 @@ function renderDetailPanel(section) {
     elements.detailTitle.textContent = "地点名表示";
     renderLabelsDetail();
   } else if (section === "history") {
-    elements.detailTitle.textContent = "訪問履歴";
+    elements.detailTitle.textContent = "地点履歴";
     renderHistoryDetail();
   } else if (section === "reset") {
     elements.detailTitle.textContent = "履歴リセット";
@@ -323,9 +325,22 @@ function showCheckinDetail(location, wasVisited = false) {
   card.className = "checkin-card";
   card.style.setProperty("--checkin-color", location.color);
 
+  const burst = document.createElement("div");
+  burst.className = "checkin-burst";
+  burst.setAttribute("aria-hidden", "true");
+
+  const badge = document.createElement("div");
+  badge.className = "checkin-badge";
+  badge.setAttribute("aria-hidden", "true");
+  badge.textContent = wasVisited ? "✓" : "★";
+
   const status = document.createElement("span");
   status.className = "checkin-status";
-  status.textContent = wasVisited ? "ALREADY CHECKED-IN" : "CHECK-IN COMPLETE";
+  status.textContent = wasVisited ? "ALREADY CHECKED-IN" : "MISSION COMPLETE";
+
+  const message = document.createElement("span");
+  message.className = "checkin-message";
+  message.textContent = wasVisited ? "このスポットは記録済みです" : "チェックイン成功！";
 
   const name = document.createElement("strong");
   name.className = "checkin-name";
@@ -338,17 +353,17 @@ function showCheckinDetail(location, wasVisited = false) {
   const note = document.createElement("p");
   note.className = "detail-note";
   note.textContent = wasVisited
-    ? "この地点はすでに訪問済みです。"
-    : "訪問履歴に記録しました。";
+    ? "訪問履歴に同じ記録があります。引き続きレーダー探索を続けましょう。"
+    : "訪問履歴に記録しました。探索データを更新しました。";
 
-  const scanAgain = document.createElement("button");
-  scanAgain.type = "button";
-  scanAgain.className = "primary-button";
-  scanAgain.textContent = "別のQRを読み取る";
-  scanAgain.addEventListener("click", openQrScanner);
+  const backToRadar = document.createElement("button");
+  backToRadar.type = "button";
+  backToRadar.className = "primary-button";
+  backToRadar.textContent = "レーダーに戻る";
+  backToRadar.addEventListener("click", closeDetailPanel);
 
-  card.append(status, name, category, note);
-  elements.detailBody.append(card, scanAgain);
+  card.append(burst, badge, status, message, name, category, note);
+  elements.detailBody.append(card, backToRadar);
 }
 
 function stopQrScanner() {
@@ -375,20 +390,11 @@ function getCameraErrorMessage(error) {
 function renderStatusDetail() {
   ensureStatusElements();
 
-  const locateButton = document.createElement("button");
-  locateButton.type = "button";
-  locateButton.className = "primary-button";
-  locateButton.textContent = "現在地・方角を更新";
-  locateButton.addEventListener("click", async () => {
-    await startOrientationTracking(true);
-    startPositionTracking(true);
-  });
-
   const help = document.createElement("p");
   help.className = "detail-note";
-  help.textContent = "近くの地点に入ると、この画面に記録ボタンが表示されます。屋内運用ではQRコード記録も使えます。";
+  help.textContent = "現在地の更新は画面下部の照準アイコンから行えます。近くの地点に入ると、この画面に記録ボタンが表示されます。";
 
-  elements.detailBody.append(elements.qrNotice, elements.locationSummary, elements.visitActions, locateButton, help);
+  elements.detailBody.append(elements.qrNotice, elements.locationSummary, elements.visitActions, help);
 }
 
 function renderCategoryDetail() {
@@ -458,7 +464,7 @@ function renderHistoryDetail() {
   elements.detailBody.replaceChildren();
 
   const historyList = document.createElement("div");
-  historyList.className = "history-list detail-history-list";
+  historyList.className = "history-card-list detail-history-list";
 
   if (!state.visits.length) {
     const empty = document.createElement("p");
@@ -473,23 +479,56 @@ function renderHistoryDetail() {
     .slice()
     .sort((a, b) => b.visitedAt.localeCompare(a.visitedAt))
     .forEach((visit) => {
-      const item = document.createElement("div");
-      item.className = "history-item";
+      const location = findLocationByUuid(visit.id);
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "history-card-button";
+      item.style.setProperty("--history-color", location?.color ?? "var(--accent)");
+
+      const medal = document.createElement("span");
+      medal.className = "history-medal";
+      medal.textContent = "★";
+
+      const content = document.createElement("span");
+      content.className = "history-card-content";
 
       const name = document.createElement("strong");
       name.textContent = visit.name;
 
       const date = document.createElement("span");
+      date.className = "history-date";
       date.textContent = new Intl.DateTimeFormat("ja-JP", {
         dateStyle: "medium",
         timeStyle: "short",
       }).format(new Date(visit.visitedAt));
 
-      item.append(name, date);
+      const action = document.createElement("span");
+      action.className = "history-action";
+      action.textContent = "カードを見る";
+
+      content.append(name, date, action);
+      item.append(medal, content);
+      item.addEventListener("click", () => {
+        if (location) {
+          showCheckinDetail(location, true);
+        } else {
+          elements.detailTitle.textContent = "地点履歴";
+          elements.detailBody.replaceChildren();
+          const note = document.createElement("p");
+          note.className = "detail-note";
+          note.textContent = "この地点は現在のCSVに見つからないため、カードを表示できませんでした。";
+          elements.detailBody.append(note);
+        }
+      });
       historyList.append(item);
     });
 
   elements.detailBody.append(historyList);
+}
+
+async function updateCurrentLocation() {
+  await startOrientationTracking(true);
+  startPositionTracking(true);
 }
 
 function renderResetDetail() {
