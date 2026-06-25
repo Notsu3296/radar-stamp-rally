@@ -197,9 +197,6 @@ h1 {
   background:
     linear-gradient(90deg, transparent 0 18%, rgba(72, 255, 208, 0.26) 18% 18.4%, transparent 18.4% 100%),
     linear-gradient(0deg, transparent 0 82%, rgba(255, 209, 102, 0.25) 82% 82.4%, transparent 82.4% 100%),
-    radial-gradient(circle at 18% 18%, rgba(255, 209, 102, 0.95) 0 5px, transparent 6px),
-    radial-gradient(circle at 82% 20%, rgba(72, 255, 208, 0.95) 0 5px, transparent 6px),
-    radial-gradient(circle at 50% 88%, rgba(255, 111, 97, 0.92) 0 5px, transparent 6px),
     linear-gradient(145deg, rgba(22, 48, 76, 0.96), rgba(6, 16, 28, 0.96));
   box-shadow: inset 0 0 0 8px rgba(112, 255, 214, 0.05), 0 0 50px rgba(72, 255, 208, 0.08);
 }

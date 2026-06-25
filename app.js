@@ -11,6 +11,7 @@ const RADAR_RANGE_LABELS = {
   normal: "通常",
   wide: "広域",
 };
+const HEADING_DISPLAY_OFFSET_DEGREES = 180;
 const CATEGORY_COLORS = {
   ハンビータウン店: "#a78bfa",
   飲食店: "#ff7b7b",
@@ -651,7 +652,7 @@ function updateRadarOrientation() {
 function positionRadarMarker(marker) {
   const bearing = Number(marker.dataset.bearing);
   const radiusPercent = Number(marker.dataset.radiusPercent);
-  const relativeBearing = bearing - (state.heading ?? 0);
+  const relativeBearing = bearing - getDisplayHeading();
   const angle = (relativeBearing - 90) * Math.PI / 180;
 
   marker.style.left = `${50 + Math.cos(angle) * radiusPercent}%`;
@@ -660,12 +661,17 @@ function positionRadarMarker(marker) {
 
 function positionCompassLabel(label) {
   const bearing = Number(label.dataset.bearing);
-  const relativeBearing = bearing - (state.heading ?? 0);
+  const relativeBearing = bearing - getDisplayHeading();
   const angle = (relativeBearing - 90) * Math.PI / 180;
   const radiusPercent = 42;
 
   label.style.left = `${50 + Math.cos(angle) * radiusPercent}%`;
   label.style.top = `${50 + Math.sin(angle) * radiusPercent}%`;
+}
+
+function getDisplayHeading() {
+  if (state.heading === null) return 0;
+  return normalizeHeading(state.heading + HEADING_DISPLAY_OFFSET_DEGREES);
 }
 
 function renderVisitActions(unvisited) {
