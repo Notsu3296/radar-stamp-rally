@@ -5,6 +5,7 @@ const RADAR_RANGES = {
   normal: 1000,
   wide: 5000,
 };
+const RADAR_RANGE_ORDER = ["detail", "normal", "wide"];
 const RADAR_RANGE_LABELS = {
   detail: "詳細",
   normal: "通常",
@@ -32,6 +33,7 @@ const state = {
   radarRangeMode: "normal",
   pendingRadarRangeMode: null,
   visibleCategories: new Set(),
+  activeDetailSection: null,
 };
 
 const elements = {
@@ -43,36 +45,29 @@ const elements = {
   closeMenuButton: document.querySelector("#closeMenuButton"),
   actionPanel: document.querySelector("#actionPanel"),
   menuBackdrop: document.querySelector("#menuBackdrop"),
-  locateButton: document.querySelector("#locateButton"),
-  rangeButton: document.querySelector("#rangeButton"),
-  rangeMenu: document.querySelector("#rangeMenu"),
-  rangeOptions: document.querySelector("#rangeOptions"),
-  rangeConfirmButton: document.querySelector("#rangeConfirmButton"),
-  categoryButton: document.querySelector("#categoryButton"),
-  categoryMenu: document.querySelector("#categoryMenu"),
-  categoryOptions: document.querySelector("#categoryOptions"),
-  categoryCloseButton: document.querySelector("#categoryCloseButton"),
-  labelsButton: document.querySelector("#labelsButton"),
-  historyButton: document.querySelector("#historyButton"),
-  resetButton: document.querySelector("#resetButton"),
-  visitActions: document.querySelector("#visitActions"),
-  locationSummary: document.querySelector("#locationSummary"),
-  qrNotice: document.querySelector("#qrNotice"),
-  historyDialog: document.querySelector("#historyDialog"),
-  closeHistoryButton: document.querySelector("#closeHistoryButton"),
-  historyList: document.querySelector("#historyList"),
+  menuItemButtons: document.querySelectorAll("[data-detail]"),
+  detailPanel: document.querySelector("#detailPanel"),
+  detailBackdrop: document.querySelector("#detailBackdrop"),
+  closeDetailButton: document.querySelector("#closeDetailButton"),
+  detailTitle: document.querySelector("#detailTitle"),
+  detailBody: document.querySelector("#detailBody"),
+  rangeSlider: document.querySelector("#rangeSlider"),
+  rangeModeLabel: document.querySelector("#rangeModeLabel"),
+  qrNotice: null,
+  locationSummary: null,
+  visitActions: null,
 };
 
 init();
 
 async function init() {
+  ensureStatusElements();
   bindEvents();
   startOrientationTracking();
 
   try {
     state.locations = await loadLocations();
     state.visibleCategories = new Set(state.locations.map((location) => location.category));
-    renderCategoryOptions();
     await handleQrVisit();
     render();
     startPositionTracking();
@@ -87,32 +82,27 @@ function bindEvents() {
   elements.menuButton.addEventListener("click", openMenu);
   elements.closeMenuButton.addEventListener("click", closeMenu);
   elements.menuBackdrop.addEventListener("click", closeMenu);
+  elements.closeDetailButton.addEventListener("click", closeDetailPanel);
+  elements.detailBackdrop.addEventListener("click", closeDetailPanel);
   window.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") closeMenu();
+    if (event.key === "Escape") {
+      closeMenu();
+      closeDetailPanel();
+    }
   });
 
-  elements.locateButton.addEventListener("click", async () => {
-    await startOrientationTracking(true);
-    startPositionTracking(true);
+  elements.menuItemButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      openDetailPanel(button.dataset.detail);
+      closeMenu();
+    });
   });
-  elements.labelsButton.addEventListener("click", toggleLocationLabels);
-  elements.rangeButton.addEventListener("click", toggleRangeMenu);
-  elements.rangeConfirmButton.addEventListener("click", confirmRadarRange);
-  elements.categoryButton.addEventListener("click", toggleCategoryMenu);
-  elements.categoryCloseButton.addEventListener("click", closeCategoryMenu);
+
+  elements.rangeSlider.addEventListener("input", () => {
+    setRadarRange(RADAR_RANGE_ORDER[Number(elements.rangeSlider.value)]);
+  });
+
   elements.radarSweep.addEventListener("animationiteration", applyLatestPosition);
-  elements.historyButton.addEventListener("click", () => {
-    renderHistory();
-    elements.historyDialog.showModal();
-  });
-  elements.closeHistoryButton.addEventListener("click", () => elements.historyDialog.close());
-  elements.resetButton.addEventListener("click", () => {
-    const shouldReset = window.confirm("訪問履歴をすべて削除しますか？");
-    if (!shouldReset) return;
-    state.visits = [];
-    saveVisits();
-    render();
-  });
 }
 
 function openMenu() {
@@ -122,93 +112,83 @@ function openMenu() {
 }
 
 function closeMenu() {
-  closeRangeMenu();
-  closeCategoryMenu();
   elements.actionPanel.classList.remove("is-open");
   elements.menuBackdrop.hidden = true;
   elements.menuButton.setAttribute("aria-expanded", "false");
 }
 
-function toggleLocationLabels() {
-  state.showLabels = !state.showLabels;
-  elements.radar.classList.toggle("show-labels", state.showLabels);
-  elements.labelsButton.setAttribute("aria-pressed", String(state.showLabels));
-  elements.labelsButton.textContent = state.showLabels ? "地点名を非表示" : "地点名を表示";
-}
+function setRadarRange(mode) {
+  if (!RADAR_RANGES[mode]) return;
 
-function toggleRangeMenu() {
-  const shouldOpen = elements.rangeMenu.classList.contains("hidden");
-  closeCategoryMenu();
-
-  if (!shouldOpen) {
-    closeRangeMenu();
-    return;
-  }
-
-  state.pendingRadarRangeMode = null;
-  renderRangeOptions();
-  elements.rangeMenu.classList.remove("hidden");
-  elements.rangeButton.setAttribute("aria-expanded", "true");
-}
-
-function renderRangeOptions() {
-  elements.rangeOptions.replaceChildren();
-
-  Object.keys(RADAR_RANGES)
-    .filter((mode) => mode !== state.radarRangeMode)
-    .forEach((mode) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "menu-option-button";
-      button.textContent = RADAR_RANGE_LABELS[mode];
-      button.dataset.rangeMode = mode;
-      button.addEventListener("click", () => selectPendingRadarRange(mode));
-      elements.rangeOptions.append(button);
-    });
-
-  elements.rangeConfirmButton.disabled = true;
-}
-
-function selectPendingRadarRange(mode) {
-  state.pendingRadarRangeMode = mode;
-  elements.rangeOptions.querySelectorAll("[data-range-mode]").forEach((button) => {
-    button.classList.toggle("selected", button.dataset.rangeMode === mode);
-  });
-  elements.rangeConfirmButton.disabled = false;
-}
-
-function confirmRadarRange() {
-  if (!state.pendingRadarRangeMode) return;
-
-  state.radarRangeMode = state.pendingRadarRangeMode;
-  elements.rangeButton.textContent = `表示範囲：${RADAR_RANGE_LABELS[state.radarRangeMode]}`;
-  closeRangeMenu();
+  state.radarRangeMode = mode;
+  elements.rangeSlider.value = String(RADAR_RANGE_ORDER.indexOf(mode));
+  elements.rangeModeLabel.textContent = RADAR_RANGE_LABELS[mode];
   render();
   pulseRadar();
 }
 
-function closeRangeMenu() {
-  state.pendingRadarRangeMode = null;
-  elements.rangeMenu.classList.add("hidden");
-  elements.rangeButton.setAttribute("aria-expanded", "false");
+function openDetailPanel(section) {
+  state.activeDetailSection = section;
+  renderDetailPanel(section);
+  elements.detailPanel.classList.remove("hidden");
+  elements.detailBackdrop.hidden = false;
 }
 
-function toggleCategoryMenu() {
-  const shouldOpen = elements.categoryMenu.classList.contains("hidden");
-  closeRangeMenu();
+function closeDetailPanel() {
+  state.activeDetailSection = null;
+  elements.detailPanel.classList.add("hidden");
+  elements.detailBackdrop.hidden = true;
+}
 
-  if (!shouldOpen) {
-    closeCategoryMenu();
-    return;
+function renderDetailPanel(section) {
+  elements.detailBody.replaceChildren();
+
+  if (section === "status") {
+    elements.detailTitle.textContent = "現在地・記録";
+    renderStatusDetail();
+  } else if (section === "category") {
+    elements.detailTitle.textContent = "カテゴリ表示";
+    renderCategoryDetail();
+  } else if (section === "labels") {
+    elements.detailTitle.textContent = "地点名表示";
+    renderLabelsDetail();
+  } else if (section === "history") {
+    elements.detailTitle.textContent = "訪問履歴";
+    renderHistoryDetail();
+  } else if (section === "reset") {
+    elements.detailTitle.textContent = "履歴リセット";
+    renderResetDetail();
   }
-
-  renderCategoryOptions();
-  elements.categoryMenu.classList.remove("hidden");
-  elements.categoryButton.setAttribute("aria-expanded", "true");
 }
 
-function renderCategoryOptions() {
-  elements.categoryOptions.replaceChildren();
+function renderStatusDetail() {
+  ensureStatusElements();
+
+  const locateButton = document.createElement("button");
+  locateButton.type = "button";
+  locateButton.className = "primary-button";
+  locateButton.textContent = "現在地・方角を更新";
+  locateButton.addEventListener("click", async () => {
+    await startOrientationTracking(true);
+    startPositionTracking(true);
+  });
+
+  const help = document.createElement("p");
+  help.className = "detail-note";
+  help.textContent = "近くの地点に入ると、この画面に記録ボタンが表示されます。屋内運用ではQRコード記録も使えます。";
+
+  elements.detailBody.append(elements.qrNotice, elements.locationSummary, elements.visitActions, locateButton, help);
+}
+
+function renderCategoryDetail() {
+  elements.detailBody.replaceChildren();
+
+  const lead = document.createElement("p");
+  lead.className = "detail-note";
+  lead.textContent = "レーダーに表示するカテゴリを切り替えます。";
+
+  const options = document.createElement("div");
+  options.className = "option-list";
   const categories = [...new Set(state.locations.map((location) => location.category))];
 
   categories.forEach((category) => {
@@ -221,8 +201,10 @@ function renderCategoryOptions() {
     button.setAttribute("aria-pressed", String(isVisible));
     button.classList.toggle("selected", isVisible);
     button.addEventListener("click", () => toggleCategory(category));
-    elements.categoryOptions.append(button);
+    options.append(button);
   });
+
+  elements.detailBody.append(lead, options);
 }
 
 function toggleCategory(category) {
@@ -232,13 +214,115 @@ function toggleCategory(category) {
     state.visibleCategories.add(category);
   }
 
-  renderCategoryOptions();
   render();
+  renderCategoryDetail();
 }
 
-function closeCategoryMenu() {
-  elements.categoryMenu.classList.add("hidden");
-  elements.categoryButton.setAttribute("aria-expanded", "false");
+function renderLabelsDetail() {
+  elements.detailBody.replaceChildren();
+
+  const note = document.createElement("p");
+  note.className = "detail-note";
+  note.textContent = "デバッグ用に、レーダー内の地点名表示を切り替えます。通常運用では非表示がおすすめです。";
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "primary-button";
+  button.setAttribute("aria-pressed", String(state.showLabels));
+  button.textContent = state.showLabels ? "地点名を非表示にする" : "地点名を表示する";
+  button.addEventListener("click", () => {
+    toggleLocationLabels();
+    renderLabelsDetail();
+  });
+
+  elements.detailBody.append(note, button);
+}
+
+function toggleLocationLabels() {
+  state.showLabels = !state.showLabels;
+  elements.radar.classList.toggle("show-labels", state.showLabels);
+}
+
+function renderHistoryDetail() {
+  elements.detailBody.replaceChildren();
+
+  const historyList = document.createElement("div");
+  historyList.className = "history-list detail-history-list";
+
+  if (!state.visits.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty";
+    empty.textContent = "訪問履歴はまだありません。";
+    historyList.append(empty);
+    elements.detailBody.append(historyList);
+    return;
+  }
+
+  state.visits
+    .slice()
+    .sort((a, b) => b.visitedAt.localeCompare(a.visitedAt))
+    .forEach((visit) => {
+      const item = document.createElement("div");
+      item.className = "history-item";
+
+      const name = document.createElement("strong");
+      name.textContent = visit.name;
+
+      const date = document.createElement("span");
+      date.textContent = new Intl.DateTimeFormat("ja-JP", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(new Date(visit.visitedAt));
+
+      item.append(name, date);
+      historyList.append(item);
+    });
+
+  elements.detailBody.append(historyList);
+}
+
+function renderResetDetail() {
+  elements.detailBody.replaceChildren();
+
+  const note = document.createElement("p");
+  note.className = "detail-note";
+  note.textContent = "訪問履歴をすべて削除します。この操作は元に戻せません。";
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "danger-button";
+  button.textContent = "履歴をリセット";
+  button.addEventListener("click", () => {
+    const shouldReset = window.confirm("訪問履歴をすべて削除しますか？");
+    if (!shouldReset) return;
+    state.visits = [];
+    saveVisits();
+    render();
+    renderResetDetail();
+  });
+
+  elements.detailBody.append(note, button);
+}
+
+function ensureStatusElements() {
+  if (!elements.qrNotice) {
+    elements.qrNotice = document.createElement("div");
+    elements.qrNotice.id = "qrNotice";
+    elements.qrNotice.className = "notice hidden";
+  }
+
+  if (!elements.locationSummary) {
+    elements.locationSummary = document.createElement("div");
+    elements.locationSummary.id = "locationSummary";
+    elements.locationSummary.className = "summary";
+    elements.locationSummary.textContent = "現在地は未取得です。";
+  }
+
+  if (!elements.visitActions) {
+    elements.visitActions = document.createElement("div");
+    elements.visitActions.id = "visitActions";
+    elements.visitActions.className = "visit-actions";
+  }
 }
 
 async function startOrientationTracking(fromUserGesture = false) {
@@ -607,38 +691,6 @@ function renderVisitActions(unvisited) {
   });
 }
 
-function renderHistory() {
-  elements.historyList.replaceChildren();
-
-  if (!state.visits.length) {
-    const empty = document.createElement("p");
-    empty.className = "empty";
-    empty.textContent = "訪問履歴はまだありません。";
-    elements.historyList.append(empty);
-    return;
-  }
-
-  state.visits
-    .slice()
-    .sort((a, b) => b.visitedAt.localeCompare(a.visitedAt))
-    .forEach((visit) => {
-      const item = document.createElement("div");
-      item.className = "history-item";
-
-      const name = document.createElement("strong");
-      name.textContent = visit.name;
-
-      const date = document.createElement("span");
-      date.textContent = new Intl.DateTimeFormat("ja-JP", {
-        dateStyle: "medium",
-        timeStyle: "short",
-      }).format(new Date(visit.visitedAt));
-
-      item.append(name, date);
-      elements.historyList.append(item);
-    });
-}
-
 function recordVisit(location) {
   if (isVisited(location.id)) return;
 
@@ -648,7 +700,7 @@ function recordVisit(location) {
     visitedAt: new Date().toISOString(),
   });
   saveVisits();
-  renderHistory();
+  if (state.activeDetailSection === "history") renderHistoryDetail();
 }
 
 function isVisited(id) {
