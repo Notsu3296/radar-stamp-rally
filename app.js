@@ -11,9 +11,11 @@ const RADAR_RANGE_LABELS = {
   normal: "通常",
   wide: "広域",
 };
-const DEBUG_HEADING = true;
+const RADAR_DOT_VISIBLE_MS = 10000;
+const RADAR_DOT_FADE_MS = 5000;
+const DEBUG_HEADING = false;
 const USE_SCREEN_ANGLE_COMPENSATION = false;
-const HEADING_DISPLAY_OFFSET_DEGREES = -180;
+const HEADING_DISPLAY_OFFSET_DEGREES = 180;
 const CATEGORY_COLORS = {
   ハンビータウン店: "#a78bfa",
   飲食店: "#ff7b7b",
@@ -28,6 +30,11 @@ const state = {
   latestPosition: null,
   positionWatchId: null,
   heading: null,
+  lockedHeading: null,
+  radarDotsVisible: false,
+  radarDotsFading: false,
+  radarDotTimerId: null,
+  radarDotFadeTimerId: null,
   lastRawWebkitCompassHeading: null,
   lastRawAlpha: null,
   lastEventAbsolute: null,
@@ -70,6 +77,7 @@ const elements = {
   gpsAccuracyBadge: document.querySelector("#gpsAccuracyBadge"),
   qrNotice: null,
   locationSummary: null,
+  radarHint: null,
   visitActions: null,
 };
 
@@ -118,8 +126,6 @@ function bindEvents() {
   elements.rangeSlider.addEventListener("input", () => {
     setRadarRange(RADAR_RANGE_ORDER[Number(elements.rangeSlider.value)]);
   });
-
-  elements.radarSweep.addEventListener("animationiteration", applyLatestPosition);
 }
 
 function openMenu() {
@@ -407,7 +413,7 @@ function renderGuideDetail() {
 
   const items = [
     ["レーダーを見る", "未訪問スポットがレーダーに表示されます。表示範囲バーで、詳細・通常・広域を切り替えられます。"],
-    ["現在地を更新", "画面右下の照準アイコンで、現在地と方角を更新します。GPS精度は画面左下に表示されます。"],
+    ["探知", "立ち止まって周囲を確認してから、画面右下の照準アイコンで探知します。周辺の反応は10秒間だけ表示されます。GPS精度は画面左下に表示されます。"],
     ["QRでチェックイン", "建物内やGPSが不安定な場所では、上部のQR CHECK-INからチェックインします。"],
     ["カードを集める", "チェックインした地点は地点履歴に残り、メダルカードをいつでも見返せます。"],
   ];
@@ -560,7 +566,114 @@ function renderHistoryDetail() {
 
 async function updateCurrentLocation() {
   await startOrientationTracking(true);
-  startPositionTracking(true);
+  elements.locateIconButton.disabled = true;
+  elements.locateIconButton.setAttribute("aria-busy", "true");
+  elements.locationSummary.textContent = "探知しています。立ち止まって周囲を確認してください。";
+  elements.locationSummary.classList.remove("hidden");
+
+  try {
+    const [heading, position] = await Promise.all([
+      getHeadingForDetection(),
+      getCurrentPositionForDetection(),
+    ]);
+
+    if (position) {
+      storeLatestPosition(position);
+      state.currentPosition = { ...state.latestPosition };
+      updateGpsAccuracyBadge();
+    } else if (!state.currentPosition && state.latestPosition) {
+      state.currentPosition = { ...state.latestPosition };
+      updateGpsAccuracyBadge();
+    }
+
+    if (!state.currentPosition) {
+      state.radarDotsVisible = false;
+      state.radarDotsFading = false;
+      render();
+      return;
+    }
+
+    state.lockedHeading = heading ?? state.heading;
+    startRadarDotDisplay();
+    render();
+    pulseRadar();
+  } finally {
+    elements.locateIconButton.disabled = false;
+    elements.locateIconButton.removeAttribute("aria-busy");
+  }
+}
+
+function getHeadingForDetection() {
+  return new Promise((resolve) => {
+    resetHeadingCalibration();
+
+    const startedAt = Date.now();
+    const timeoutMs = 1400;
+    const intervalId = window.setInterval(() => {
+      if (state.heading !== null || Date.now() - startedAt >= timeoutMs) {
+        window.clearInterval(intervalId);
+        resolve(state.heading);
+      }
+    }, 80);
+  });
+}
+
+function getCurrentPositionForDetection() {
+  if (!navigator.geolocation) {
+    return Promise.resolve(null);
+  }
+
+  const options = {
+    enableHighAccuracy: true,
+    timeout: 12000,
+    maximumAge: 0,
+  };
+
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (position) => resolve(position),
+      (error) => {
+        handlePositionError(error);
+        resolve(null);
+      },
+      options,
+    );
+  });
+}
+
+function startRadarDotDisplay() {
+  clearRadarDotTimers();
+  state.radarDotsVisible = true;
+  state.radarDotsFading = false;
+
+  const fadeDelay = Math.max(RADAR_DOT_VISIBLE_MS - RADAR_DOT_FADE_MS, 0);
+  state.radarDotFadeTimerId = window.setTimeout(() => {
+    state.radarDotsFading = true;
+    renderRadar(getVisibleUnvisitedLocations());
+  }, fadeDelay);
+
+  state.radarDotTimerId = window.setTimeout(() => {
+    hideRadarDots();
+  }, RADAR_DOT_VISIBLE_MS);
+}
+
+function hideRadarDots() {
+  clearRadarDotTimers();
+  state.radarDotsVisible = false;
+  state.radarDotsFading = false;
+  renderRadar(getVisibleUnvisitedLocations());
+}
+
+function clearRadarDotTimers() {
+  if (state.radarDotTimerId !== null) {
+    window.clearTimeout(state.radarDotTimerId);
+    state.radarDotTimerId = null;
+  }
+
+  if (state.radarDotFadeTimerId !== null) {
+    window.clearTimeout(state.radarDotFadeTimerId);
+    state.radarDotFadeTimerId = null;
+  }
 }
 
 function renderResetDetail() {
@@ -587,6 +700,9 @@ function renderResetDetail() {
 }
 
 function ensureStatusElements() {
+  elements.locateIconButton.setAttribute("aria-label", "探知");
+  elements.locateIconButton.setAttribute("title", "探知");
+
   if (!elements.qrNotice) {
     elements.qrNotice = document.createElement("div");
     elements.qrNotice.id = "qrNotice";
@@ -598,6 +714,14 @@ function ensureStatusElements() {
     elements.locationSummary.id = "locationSummary";
     elements.locationSummary.className = "summary";
     elements.locationSummary.textContent = "現在地は未取得です。";
+  }
+
+  if (!elements.radarHint) {
+    elements.radarHint = document.createElement("div");
+    elements.radarHint.id = "radarHint";
+    elements.radarHint.className = "radar-hint";
+    elements.radarHint.textContent = "立ち止まって周囲を確認してから探知してください。探知すると周辺の反応を10秒間表示します。";
+    elements.radar.append(elements.radarHint);
   }
 
   if (!elements.visitActions) {
@@ -914,13 +1038,17 @@ function getGpsAccuracyLevel(accuracy) {
 }
 
 function render() {
-  const unvisited = state.locations.filter((location) => (
-    !isVisited(location.id) && state.visibleCategories.has(location.category)
-  ));
+  const unvisited = getVisibleUnvisitedLocations();
   renderSummary(unvisited);
   renderRadar(unvisited);
   updateRadarOrientation();
   renderVisitActions(unvisited);
+}
+
+function getVisibleUnvisitedLocations() {
+  return state.locations.filter((location) => (
+    !isVisited(location.id) && state.visibleCategories.has(location.category)
+  ));
 }
 
 function renderSummary(unvisited) {
@@ -937,7 +1065,9 @@ function renderSummary(unvisited) {
 
 function renderRadar(unvisited) {
   elements.radarMarkers.replaceChildren();
-  if (!state.currentPosition) return;
+  elements.radarMarkers.classList.toggle("is-fading", state.radarDotsFading);
+  elements.radarHint.hidden = state.radarDotsVisible;
+  if (!state.radarDotsVisible || !state.currentPosition) return;
 
   const maxDistanceMeters = RADAR_RANGES[state.radarRangeMode];
 
@@ -1007,8 +1137,9 @@ function positionCompassLabel(label) {
 }
 
 function getDisplayHeading() {
-  if (state.heading === null) return 0;
-  return normalizeHeading(state.heading + HEADING_DISPLAY_OFFSET_DEGREES);
+  const heading = state.lockedHeading ?? state.heading;
+  if (heading === null) return 0;
+  return normalizeHeading(heading + HEADING_DISPLAY_OFFSET_DEGREES);
 }
 
 function getRadarPoint(bearing, heading, radiusPercent) {
