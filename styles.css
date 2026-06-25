@@ -1,15 +1,17 @@
 :root {
   color-scheme: dark;
-  --bg: #08110f;
-  --panel: #10201c;
-  --panel-2: #142923;
-  --line: rgba(142, 245, 199, 0.24);
-  --text: #effaf5;
-  --muted: #9bb8ad;
-  --accent: #62e6a8;
-  --accent-2: #f6c65b;
-  --danger: #ff7b7b;
-  --shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
+  --bg: #19233a;
+  --panel: #fff2c8;
+  --panel-2: #263957;
+  --ink: #14213d;
+  --line: rgba(36, 255, 173, 0.24);
+  --text: #fff7dc;
+  --muted: #c8d5d0;
+  --accent: #3ef5aa;
+  --accent-2: #ffd34d;
+  --danger: #ff6f61;
+  --shadow: 0 18px 0 #0c1426, 0 28px 60px rgba(0, 0, 0, 0.42);
+  --comic-line: 4px solid #111827;
 }
 
 * {
@@ -22,10 +24,13 @@ body {
   height: 100dvh;
   overflow: hidden;
   background:
-    radial-gradient(circle at 18% 10%, rgba(98, 230, 168, 0.14), transparent 28%),
-    linear-gradient(160deg, #08110f 0%, #111c26 48%, #151512 100%);
+    radial-gradient(circle at 18% 12%, rgba(255, 211, 77, 0.28), transparent 18%),
+    radial-gradient(circle at 82% 18%, rgba(62, 245, 170, 0.2), transparent 22%),
+    linear-gradient(135deg, transparent 0 22px, rgba(255, 255, 255, 0.035) 22px 24px, transparent 24px 48px),
+    linear-gradient(160deg, #283f68 0%, #17243f 52%, #3d2d2a 100%);
+  background-size: auto, auto, 48px 48px, auto;
   color: var(--text);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: "Trebuchet MS", "Hiragino Maru Gothic ProN", "Yu Gothic", system-ui, sans-serif;
 }
 
 button {
@@ -35,22 +40,25 @@ button {
 }
 
 .app-shell {
-  width: min(100%, 920px);
+  position: relative;
+  width: min(100%, 1080px);
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
   margin: 0 auto;
-  padding: 20px;
+  padding: clamp(14px, 3vw, 28px);
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 18px;
+  grid-template-rows: minmax(0, 1fr);
+  place-items: center;
 }
 
 .top-bar {
+  position: fixed;
+  top: clamp(12px, 3vw, 24px);
+  left: clamp(12px, 3vw, 24px);
+  z-index: 50;
   display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  justify-content: flex-end;
+  align-items: center;
 }
 
 h1,
@@ -69,31 +77,61 @@ h1 {
   line-height: 1.6;
 }
 
+.action-panel .summary {
+  color: #263957;
+  font-weight: 800;
+}
+
 .icon-text-button,
+.menu-button,
 .primary-button,
 .secondary-button,
 .visit-button,
 .close-button {
   min-height: 44px;
-  border-radius: 8px;
+  border: var(--comic-line);
+  border-radius: 14px;
   padding: 0 16px;
   color: var(--text);
   background: var(--panel-2);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  box-shadow: 0 6px 0 #0b1020, inset 0 0 0 2px rgba(255, 255, 255, 0.08);
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
+.menu-button {
+  width: 58px;
+  min-height: 54px;
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  padding: 10px;
+  background: var(--accent-2);
+  transform: rotate(-2deg);
+}
+
+.menu-button span {
+  display: block;
+  height: 5px;
+  border: 2px solid #111827;
+  border-radius: 999px;
+  background: #111827;
 }
 
 .primary-button,
 .visit-button {
-  background: var(--accent);
+  background: linear-gradient(180deg, #68ffbd, var(--accent));
   color: #082017;
   font-weight: 700;
 }
 
 .secondary-button {
-  color: var(--muted);
+  color: var(--text);
 }
 
 .radar-section {
+  width: min(100%, 880px);
+  height: min(100%, 880px);
   display: grid;
   place-items: center;
   min-height: 0;
@@ -103,16 +141,43 @@ h1 {
 
 .radar-wrap {
   position: relative;
-  width: min(100%, 620px);
+  width: min(86vw, 86vh, 720px);
   aspect-ratio: 1;
   display: grid;
   place-items: center;
+  filter: drop-shadow(0 22px 0 #0c1426) drop-shadow(0 36px 46px rgba(0, 0, 0, 0.48));
 }
 
 @supports (width: 1cqmin) {
   .radar-wrap {
-    width: min(100cqmin, 620px);
+    width: min(92cqmin, 720px);
   }
+}
+
+.radar-wrap::before,
+.radar-wrap::after {
+  content: "";
+  position: absolute;
+  border: var(--comic-line);
+  pointer-events: none;
+}
+
+.radar-wrap::before {
+  inset: -8%;
+  border-radius: 28% 34% 30% 36%;
+  background:
+    radial-gradient(circle at 18% 18%, #ff6f61 0 11px, #111827 12px 15px, transparent 16px),
+    radial-gradient(circle at 82% 20%, #ffd34d 0 10px, #111827 11px 14px, transparent 15px),
+    radial-gradient(circle at 50% 88%, #3ef5aa 0 12px, #111827 13px 16px, transparent 17px),
+    linear-gradient(145deg, #435b86 0%, #243754 58%, #18263d 100%);
+  box-shadow: inset 0 0 0 8px rgba(255, 255, 255, 0.08);
+}
+
+.radar-wrap::after {
+  inset: -2.8%;
+  border-radius: 50%;
+  background:
+    repeating-conic-gradient(from -10deg, #ffd34d 0 7deg, #111827 7deg 9deg, #ff9f43 9deg 16deg, #111827 16deg 18deg);
 }
 
 .compass-labels {
@@ -125,25 +190,32 @@ h1 {
 .compass-labels span {
   position: absolute;
   transform: translate(-50%, -50%);
-  color: rgba(142, 245, 199, 0.42);
-  font-size: clamp(0.8rem, 2.5vw, 1rem);
-  font-weight: 800;
-  text-shadow: 0 0 8px rgba(98, 230, 168, 0.3);
+  color: rgba(255, 247, 220, 0.46);
+  font-size: clamp(0.95rem, 3vw, 1.45rem);
+  font-weight: 1000;
+  -webkit-text-stroke: 1px rgba(17, 24, 39, 0.45);
+  text-shadow: 0 3px 0 rgba(17, 24, 39, 0.72), 0 0 10px rgba(62, 245, 170, 0.35);
   transition: left 120ms linear, top 120ms linear;
 }
 
 .radar {
   position: relative;
-  width: 100%;
+  z-index: 2;
+  width: 86%;
   aspect-ratio: 1;
   overflow: hidden;
   border-radius: 50%;
   background:
-    radial-gradient(circle, rgba(98, 230, 168, 0.18) 0 1px, transparent 2px 100%),
-    radial-gradient(circle at center, rgba(98, 230, 168, 0.12), rgba(8, 17, 15, 0.95) 68%);
+    radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.28), transparent 9%),
+    radial-gradient(circle, rgba(62, 245, 170, 0.22) 0 1px, transparent 2px 100%),
+    radial-gradient(circle at center, rgba(62, 245, 170, 0.15), rgba(8, 17, 15, 0.98) 68%);
   background-size: 28px 28px, auto;
-  border: 1px solid rgba(98, 230, 168, 0.34);
-  box-shadow: var(--shadow), inset 0 0 42px rgba(98, 230, 168, 0.16);
+  border: 6px solid #111827;
+  box-shadow:
+    inset 0 0 0 7px rgba(255, 211, 77, 0.9),
+    inset 0 0 42px rgba(62, 245, 170, 0.22),
+    0 0 0 8px #6b7280,
+    0 0 0 13px #111827;
 }
 
 .radar.location-pulse {
@@ -159,7 +231,7 @@ h1 {
 .radar-sweep {
   position: absolute;
   inset: 0;
-  background: conic-gradient(from 0deg, rgba(98, 230, 168, 0.34), rgba(98, 230, 168, 0.05) 48deg, transparent 74deg);
+  background: conic-gradient(from 0deg, rgba(62, 245, 170, 0.42), rgba(62, 245, 170, 0.07) 48deg, transparent 74deg);
   animation: sweep 5s linear infinite;
 }
 
@@ -171,7 +243,7 @@ h1 {
 }
 
 .radar-ring {
-  border: 1px solid var(--line);
+  border: 2px dashed var(--line);
   border-radius: 50%;
   inset: var(--inset);
 }
@@ -207,22 +279,24 @@ h1 {
 }
 
 .radar-center {
-  width: 16px;
-  height: 16px;
-  top: calc(50% - 8px);
-  left: calc(50% - 8px);
+  width: 22px;
+  height: 22px;
+  top: calc(50% - 11px);
+  left: calc(50% - 11px);
   border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 18px var(--accent);
+  border: 4px solid #111827;
+  background: var(--accent-2);
+  box-shadow: 0 0 18px var(--accent), inset 0 0 0 3px var(--accent);
 }
 
 .marker {
-  width: 18px;
-  height: 18px;
-  margin: -9px 0 0 -9px;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
   border-radius: 50%;
   background: var(--marker-color, var(--accent-2));
-  box-shadow: 0 0 18px var(--marker-color, var(--accent-2));
+  border: 3px solid #111827;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.45), 0 0 18px var(--marker-color, var(--accent-2));
   transition: left 120ms linear, top 120ms linear;
 }
 
@@ -236,9 +310,11 @@ h1 {
   max-width: 150px;
   overflow: hidden;
   padding: 4px 8px;
-  border-radius: 6px;
-  background: rgba(8, 17, 15, 0.82);
+  border: 2px solid #111827;
+  border-radius: 10px;
+  background: rgba(255, 242, 200, 0.95);
   color: var(--text);
+  color: #14213d;
   font-size: 0.78rem;
   font-weight: 600;
   text-overflow: ellipsis;
@@ -250,20 +326,56 @@ h1 {
 }
 
 .action-panel {
-  position: relative;
+  position: fixed;
+  top: clamp(76px, 11vh, 92px);
+  left: clamp(12px, 3vw, 24px);
+  z-index: 45;
+  width: min(360px, calc(100vw - 24px));
+  max-height: calc(100dvh - 96px);
+  overflow: auto;
   display: grid;
   gap: 12px;
-  padding: 16px;
-  border-radius: 8px;
-  background: rgba(16, 32, 28, 0.9);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  padding: 14px;
+  border: var(--comic-line);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 12% 8%, rgba(255, 255, 255, 0.62), transparent 18%),
+    linear-gradient(160deg, #fff2c8 0%, #f6c65b 100%);
+  color: #14213d;
+  box-shadow: 8px 10px 0 #111827, 0 24px 60px rgba(0, 0, 0, 0.4);
+  transform: translateX(calc(-100% - 34px)) rotate(-2deg);
+  transition: transform 180ms ease;
+}
+
+.action-panel.is-open {
+  transform: translateX(0) rotate(-1deg);
+}
+
+.menu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #14213d;
+  font-size: 1.05rem;
+  font-weight: 1000;
+}
+
+.menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(8, 13, 27, 0.28);
+  backdrop-filter: blur(1px);
 }
 
 .notice {
   padding: 12px;
-  border-radius: 8px;
-  background: rgba(98, 230, 168, 0.14);
-  color: var(--accent);
+  border: 3px solid #111827;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.58);
+  color: #14213d;
+  font-weight: 800;
 }
 
 .hidden {
@@ -272,8 +384,8 @@ h1 {
 
 .visit-actions,
 .controls {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 1fr;
   gap: 10px;
 }
 
@@ -288,15 +400,15 @@ h1 {
 
 .option-menu {
   position: absolute;
-  right: 0;
-  bottom: calc(100% + 8px);
+  left: 0;
+  top: calc(100% + 8px);
   z-index: 20;
-  width: min(260px, calc(100vw - 32px));
+  width: min(300px, calc(100vw - 48px));
   padding: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 10px;
-  background: rgba(8, 17, 15, 0.98);
-  box-shadow: var(--shadow);
+  border: 3px solid #111827;
+  border-radius: 16px;
+  background: rgba(20, 33, 61, 0.98);
+  box-shadow: 6px 7px 0 #111827, 0 14px 28px rgba(0, 0, 0, 0.32);
 }
 
 .option-list {
@@ -307,11 +419,13 @@ h1 {
 .menu-option-button,
 .menu-confirm-button {
   min-height: 42px;
-  border-radius: 7px;
+  border: 3px solid #111827;
+  border-radius: 12px;
   padding: 8px 12px;
   color: var(--text);
   background: var(--panel-2);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 0 #0b1020;
+  font-weight: 900;
 }
 
 .menu-option-button.selected {
@@ -358,16 +472,16 @@ h1 {
 }
 
 .visit-button {
-  flex: 1 1 220px;
+  width: 100%;
 }
 
 .history-dialog {
   width: min(calc(100% - 32px), 560px);
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
+  border: var(--comic-line);
+  border-radius: 18px;
   background: var(--panel);
-  color: var(--text);
+  color: #14213d;
   box-shadow: var(--shadow);
 }
 
@@ -400,8 +514,10 @@ h1 {
 
 .history-item {
   padding: 12px;
-  border-radius: 8px;
+  border: 3px solid #111827;
+  border-radius: 14px;
   background: var(--panel-2);
+  color: var(--text);
 }
 
 .history-item strong {
@@ -421,13 +537,26 @@ h1 {
 
 @keyframes location-pulse {
   0% {
-    box-shadow: var(--shadow), inset 0 0 42px rgba(98, 230, 168, 0.16);
+    box-shadow:
+      inset 0 0 0 7px rgba(255, 211, 77, 0.9),
+      inset 0 0 42px rgba(62, 245, 170, 0.22),
+      0 0 0 8px #6b7280,
+      0 0 0 13px #111827;
   }
   35% {
-    box-shadow: 0 0 36px rgba(98, 230, 168, 0.8), inset 0 0 60px rgba(98, 230, 168, 0.42);
+    box-shadow:
+      inset 0 0 0 7px rgba(255, 211, 77, 1),
+      inset 0 0 64px rgba(62, 245, 170, 0.56),
+      0 0 0 8px #fff7dc,
+      0 0 0 13px #111827,
+      0 0 42px rgba(62, 245, 170, 0.9);
   }
   100% {
-    box-shadow: var(--shadow), inset 0 0 42px rgba(98, 230, 168, 0.16);
+    box-shadow:
+      inset 0 0 0 7px rgba(255, 211, 77, 0.9),
+      inset 0 0 42px rgba(62, 245, 170, 0.22),
+      0 0 0 8px #6b7280,
+      0 0 0 13px #111827;
   }
 }
 
@@ -448,7 +577,7 @@ h1 {
 
   .controls {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
     gap: 6px;
   }
 
@@ -463,6 +592,7 @@ h1 {
   }
 
   .icon-text-button,
+  .menu-button,
   .primary-button,
   .secondary-button {
     min-height: 40px;
@@ -492,6 +622,7 @@ h1 {
   }
 
   .icon-text-button,
+  .menu-button,
   .primary-button,
   .secondary-button {
     min-height: 36px;

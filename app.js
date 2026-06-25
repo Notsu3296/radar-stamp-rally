@@ -39,6 +39,10 @@ const elements = {
   radarSweep: document.querySelector(".radar-sweep"),
   radar: document.querySelector("#radar"),
   compassLabels: document.querySelector("#compassLabels"),
+  menuButton: document.querySelector("#menuButton"),
+  closeMenuButton: document.querySelector("#closeMenuButton"),
+  actionPanel: document.querySelector("#actionPanel"),
+  menuBackdrop: document.querySelector("#menuBackdrop"),
   locateButton: document.querySelector("#locateButton"),
   rangeButton: document.querySelector("#rangeButton"),
   rangeMenu: document.querySelector("#rangeMenu"),
@@ -80,6 +84,13 @@ async function init() {
 }
 
 function bindEvents() {
+  elements.menuButton.addEventListener("click", openMenu);
+  elements.closeMenuButton.addEventListener("click", closeMenu);
+  elements.menuBackdrop.addEventListener("click", closeMenu);
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeMenu();
+  });
+
   elements.locateButton.addEventListener("click", async () => {
     await startOrientationTracking(true);
     startPositionTracking(true);
@@ -102,6 +113,20 @@ function bindEvents() {
     saveVisits();
     render();
   });
+}
+
+function openMenu() {
+  elements.actionPanel.classList.add("is-open");
+  elements.menuBackdrop.hidden = false;
+  elements.menuButton.setAttribute("aria-expanded", "true");
+}
+
+function closeMenu() {
+  closeRangeMenu();
+  closeCategoryMenu();
+  elements.actionPanel.classList.remove("is-open");
+  elements.menuBackdrop.hidden = true;
+  elements.menuButton.setAttribute("aria-expanded", "false");
 }
 
 function toggleLocationLabels() {
