@@ -13,7 +13,7 @@ const RADAR_RANGE_LABELS = {
 };
 const DEBUG_HEADING = true;
 const USE_SCREEN_ANGLE_COMPENSATION = false;
-const HEADING_DISPLAY_OFFSET_DEGREES = -90;
+const HEADING_DISPLAY_OFFSET_DEGREES = -180;
 const CATEGORY_COLORS = {
   ハンビータウン店: "#a78bfa",
   飲食店: "#ff7b7b",
