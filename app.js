@@ -35,6 +35,10 @@ const state = {
   pendingRadarRangeMode: null,
   visibleCategories: new Set(),
   activeDetailSection: null,
+  qrStream: null,
+  qrScanFrameId: null,
+  qrDetector: null,
+  qrScanLocked: false,
 };
 
 const elements = {
@@ -46,6 +50,7 @@ const elements = {
   closeMenuButton: document.querySelector("#closeMenuButton"),
   actionPanel: document.querySelector("#actionPanel"),
   menuBackdrop: document.querySelector("#menuBackdrop"),
+  qrScanButton: document.querySelector("#qrScanButton"),
   menuItemButtons: document.querySelectorAll("[data-detail]"),
   detailPanel: document.querySelector("#detailPanel"),
   detailBackdrop: document.querySelector("#detailBackdrop"),
@@ -81,6 +86,7 @@ async function init() {
 
 function bindEvents() {
   elements.menuButton.addEventListener("click", openMenu);
+  elements.qrScanButton.addEventListener("click", openQrScanner);
   elements.closeMenuButton.addEventListener("click", closeMenu);
   elements.menuBackdrop.addEventListener("click", closeMenu);
   elements.closeDetailButton.addEventListener("click", closeDetailPanel);
@@ -136,6 +142,7 @@ function openDetailPanel(section) {
 }
 
 function closeDetailPanel() {
+  stopQrScanner();
   state.activeDetailSection = null;
   elements.detailPanel.classList.add("hidden");
   elements.detailBackdrop.hidden = true;
@@ -160,6 +167,209 @@ function renderDetailPanel(section) {
     elements.detailTitle.textContent = "履歴リセット";
     renderResetDetail();
   }
+}
+
+async function openQrScanner() {
+  stopQrScanner();
+  openDetailPanel("qr");
+  elements.detailTitle.textContent = "QRチェックイン";
+  renderQrScannerDetail("カメラを起動しています...");
+
+  if (!navigator.mediaDevices?.getUserMedia) {
+    renderQrScannerError("このブラウザではカメラを起動できません。QRコードURLを直接開いてチェックインしてください。");
+    return;
+  }
+
+  if (!("BarcodeDetector" in window)) {
+    renderQrScannerError("このブラウザはQRコード解析に対応していません。ChromeなどBarcodeDetector対応ブラウザでお試しください。");
+    return;
+  }
+
+  try {
+    state.qrDetector = state.qrDetector ?? new BarcodeDetector({ formats: ["qr_code"] });
+    state.qrStream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: "environment" },
+      },
+      audio: false,
+    });
+
+    renderQrScannerDetail("QRコードをカメラに写してください。");
+    const video = elements.detailBody.querySelector("#qrVideo");
+    video.srcObject = state.qrStream;
+    await video.play();
+    state.qrScanLocked = false;
+    scanQrFrame(video);
+  } catch (error) {
+    renderQrScannerError(getCameraErrorMessage(error));
+  }
+}
+
+function renderQrScannerDetail(message) {
+  elements.detailBody.replaceChildren();
+
+  const scanner = document.createElement("div");
+  scanner.className = "qr-scanner";
+
+  const video = document.createElement("video");
+  video.id = "qrVideo";
+  video.className = "qr-video";
+  video.setAttribute("playsinline", "");
+  video.muted = true;
+
+  const frame = document.createElement("div");
+  frame.className = "qr-frame";
+  frame.append(video);
+
+  const status = document.createElement("p");
+  status.className = "detail-note qr-status";
+  status.textContent = message;
+
+  const retry = document.createElement("button");
+  retry.type = "button";
+  retry.className = "secondary-button";
+  retry.textContent = "カメラを再起動";
+  retry.addEventListener("click", openQrScanner);
+
+  scanner.append(frame, status, retry);
+  elements.detailBody.append(scanner);
+}
+
+function renderQrScannerError(message) {
+  stopQrScanner();
+  elements.detailBody.replaceChildren();
+
+  const note = document.createElement("p");
+  note.className = "detail-note";
+  note.textContent = message;
+
+  const retry = document.createElement("button");
+  retry.type = "button";
+  retry.className = "primary-button";
+  retry.textContent = "もう一度読み取る";
+  retry.addEventListener("click", openQrScanner);
+
+  elements.detailBody.append(note, retry);
+}
+
+async function scanQrFrame(video) {
+  if (!state.qrStream || state.qrScanLocked) return;
+
+  try {
+    if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      const codes = await state.qrDetector.detect(video);
+      const code = codes.find((item) => item.rawValue);
+
+      if (code) {
+        state.qrScanLocked = true;
+        handleScannedQrValue(code.rawValue);
+        return;
+      }
+    }
+  } catch {
+    // 一時的に読み取れないフレームは無視して、次のフレームで再試行します。
+  }
+
+  state.qrScanFrameId = requestAnimationFrame(() => scanQrFrame(video));
+}
+
+function handleScannedQrValue(rawValue) {
+  const uuid = extractUuidFromQrValue(rawValue);
+
+  if (!uuid) {
+    renderQrScannerError("QRコードからUUIDを読み取れませんでした。このアプリ用のQRコードか確認してください。");
+    return;
+  }
+
+  const location = findLocationByUuid(uuid);
+  if (!location) {
+    renderQrScannerError("QRコードのUUIDに一致する地点が見つかりませんでした。CSVのUUIDと一致しているか確認してください。");
+    return;
+  }
+
+  const wasVisited = isVisited(location.id);
+  recordVisit(location);
+  render();
+  showCheckinDetail(location, wasVisited);
+}
+
+function extractUuidFromQrValue(rawValue) {
+  const value = rawValue.trim();
+
+  try {
+    const url = new URL(value, window.location.href);
+    const uuid = url.searchParams.get("uuid");
+    if (uuid) return uuid;
+  } catch {
+    // URLではなくUUID単体が入っているQRコードも許容します。
+  }
+
+  return value || null;
+}
+
+function findLocationByUuid(uuid) {
+  return state.locations.find((item) => item.id.toLowerCase() === uuid.toLowerCase());
+}
+
+function showCheckinDetail(location, wasVisited = false) {
+  stopQrScanner();
+  state.activeDetailSection = "checkin";
+  elements.detailTitle.textContent = wasVisited ? "チェックイン済み" : "チェックイン完了";
+  elements.detailBody.replaceChildren();
+  elements.detailPanel.classList.remove("hidden");
+  elements.detailBackdrop.hidden = false;
+
+  const card = document.createElement("div");
+  card.className = "checkin-card";
+  card.style.setProperty("--checkin-color", location.color);
+
+  const status = document.createElement("span");
+  status.className = "checkin-status";
+  status.textContent = wasVisited ? "ALREADY CHECKED-IN" : "CHECK-IN COMPLETE";
+
+  const name = document.createElement("strong");
+  name.className = "checkin-name";
+  name.textContent = location.name;
+
+  const category = document.createElement("span");
+  category.className = "checkin-category";
+  category.textContent = location.category;
+
+  const note = document.createElement("p");
+  note.className = "detail-note";
+  note.textContent = wasVisited
+    ? "この地点はすでに訪問済みです。"
+    : "訪問履歴に記録しました。";
+
+  const scanAgain = document.createElement("button");
+  scanAgain.type = "button";
+  scanAgain.className = "primary-button";
+  scanAgain.textContent = "別のQRを読み取る";
+  scanAgain.addEventListener("click", openQrScanner);
+
+  card.append(status, name, category, note);
+  elements.detailBody.append(card, scanAgain);
+}
+
+function stopQrScanner() {
+  if (state.qrScanFrameId !== null) {
+    cancelAnimationFrame(state.qrScanFrameId);
+    state.qrScanFrameId = null;
+  }
+
+  if (state.qrStream) {
+    state.qrStream.getTracks().forEach((track) => track.stop());
+    state.qrStream = null;
+  }
+
+  state.qrScanLocked = false;
+}
+
+function getCameraErrorMessage(error) {
+  if (error?.name === "NotAllowedError") return "カメラの利用が許可されていません。ブラウザの権限設定を確認してください。";
+  if (error?.name === "NotFoundError") return "利用できるカメラが見つかりませんでした。";
+  if (error?.name === "NotReadableError") return "カメラを起動できませんでした。他のアプリがカメラを使用していないか確認してください。";
+  return "カメラを起動できませんでした。";
 }
 
 function renderStatusDetail() {
@@ -508,14 +718,15 @@ async function handleQrVisit() {
   const uuid = new URLSearchParams(window.location.search).get("uuid");
   if (!uuid) return;
 
-  const location = state.locations.find((item) => item.id.toLowerCase() === uuid.toLowerCase());
+  const location = findLocationByUuid(uuid);
   if (!location) {
     showNotice("QRコードのUUIDに一致する地点が見つかりませんでした。");
     return;
   }
 
+  const wasVisited = isVisited(location.id);
   recordVisit(location);
-  showNotice(`${location.name} を訪問済みにしました。`);
+  showCheckinDetail(location, wasVisited);
 }
 
 function startPositionTracking(applyImmediately = false) {
