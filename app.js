@@ -11,7 +11,8 @@ const RADAR_RANGE_LABELS = {
   normal: "通常",
   wide: "広域",
 };
-const HEADING_DISPLAY_OFFSET_DEGREES = 180;
+const HEADING_DISPLAY_OFFSET_DEGREES = 0;
+const APPLY_SCREEN_ORIENTATION_HEADING_CORRECTION = false;
 const CATEGORY_COLORS = {
   ハンビータウン店: "#a78bfa",
   飲食店: "#ff7b7b",
@@ -633,7 +634,9 @@ async function startOrientationTracking(fromUserGesture = false) {
 
 function handleOrientation(event) {
   let heading = null;
-  const screenAngle = screen.orientation?.angle ?? window.orientation ?? 0;
+  const screenAngle = APPLY_SCREEN_ORIENTATION_HEADING_CORRECTION
+    ? screen.orientation?.angle ?? window.orientation ?? 0
+    : 0;
 
   const hasReliableWebkitHeading = Number.isFinite(event.webkitCompassHeading)
     && (!Number.isFinite(event.webkitCompassAccuracy) || event.webkitCompassAccuracy >= 0);
@@ -956,26 +959,60 @@ function updateRadarOrientation() {
 function positionRadarMarker(marker) {
   const bearing = Number(marker.dataset.bearing);
   const radiusPercent = Number(marker.dataset.radiusPercent);
-  const relativeBearing = bearing - getDisplayHeading();
-  const angle = (relativeBearing - 90) * Math.PI / 180;
+  const position = getRadarPoint(bearing, getDisplayHeading(), radiusPercent);
 
-  marker.style.left = `${50 + Math.cos(angle) * radiusPercent}%`;
-  marker.style.top = `${50 + Math.sin(angle) * radiusPercent}%`;
+  marker.style.left = `${position.left}%`;
+  marker.style.top = `${position.top}%`;
 }
 
 function positionCompassLabel(label) {
   const bearing = Number(label.dataset.bearing);
-  const relativeBearing = bearing - getDisplayHeading();
-  const angle = (relativeBearing - 90) * Math.PI / 180;
   const radiusPercent = 42;
+  const position = getRadarPoint(bearing, getDisplayHeading(), radiusPercent);
 
-  label.style.left = `${50 + Math.cos(angle) * radiusPercent}%`;
-  label.style.top = `${50 + Math.sin(angle) * radiusPercent}%`;
+  label.style.left = `${position.left}%`;
+  label.style.top = `${position.top}%`;
 }
 
 function getDisplayHeading() {
   if (state.heading === null) return 0;
   return normalizeHeading(state.heading + HEADING_DISPLAY_OFFSET_DEGREES);
+}
+
+function getRadarPoint(bearing, heading, radiusPercent) {
+  const relativeBearing = bearing - heading;
+  const angle = (relativeBearing - 90) * Math.PI / 180;
+
+  return {
+    left: 50 + Math.cos(angle) * radiusPercent,
+    top: 50 + Math.sin(angle) * radiusPercent,
+  };
+}
+
+function debugRadarHeadingTest(radiusPercent = 40) {
+  const bearings = [0, 90, 180, 270];
+  const cases = [
+    { heading: 0, expected: "0=上, 90=右, 180=下, 270=左" },
+    { heading: 90, expected: "bearing 0=左" },
+  ];
+
+  return cases.map(({ heading, expected }) => ({
+    heading,
+    expected,
+    points: Object.fromEntries(
+      bearings.map((bearing) => {
+        const point = getRadarPoint(bearing, heading, radiusPercent);
+        return [bearing, {
+          left: Number(point.left.toFixed(2)),
+          top: Number(point.top.toFixed(2)),
+        }];
+      }),
+    ),
+  }));
+}
+
+if (typeof window !== "undefined") {
+  window.debugRadarHeadingTest = debugRadarHeadingTest;
 }
 
 function renderVisitActions(unvisited) {
