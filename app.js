@@ -11,8 +11,9 @@ const RADAR_RANGE_LABELS = {
   normal: "通常",
   wide: "広域",
 };
+const DEBUG_HEADING = true;
+const USE_SCREEN_ANGLE_COMPENSATION = false;
 const HEADING_DISPLAY_OFFSET_DEGREES = 0;
-const APPLY_SCREEN_ORIENTATION_HEADING_CORRECTION = false;
 const CATEGORY_COLORS = {
   ハンビータウン店: "#a78bfa",
   飲食店: "#ff7b7b",
@@ -27,6 +28,11 @@ const state = {
   latestPosition: null,
   positionWatchId: null,
   heading: null,
+  lastRawWebkitCompassHeading: null,
+  lastRawAlpha: null,
+  lastEventAbsolute: null,
+  lastScreenAngle: 0,
+  lastNormalizedHeading: null,
   orientationSamples: [],
   orientationSampleStartedAt: null,
   orientationListening: false,
@@ -634,9 +640,15 @@ async function startOrientationTracking(fromUserGesture = false) {
 
 function handleOrientation(event) {
   let heading = null;
-  const screenAngle = APPLY_SCREEN_ORIENTATION_HEADING_CORRECTION
-    ? screen.orientation?.angle ?? window.orientation ?? 0
+  const screenAngle = USE_SCREEN_ANGLE_COMPENSATION
+    ? (screen.orientation?.angle ?? window.orientation ?? 0)
     : 0;
+  state.lastRawWebkitCompassHeading = Number.isFinite(event.webkitCompassHeading)
+    ? event.webkitCompassHeading
+    : null;
+  state.lastRawAlpha = Number.isFinite(event.alpha) ? event.alpha : null;
+  state.lastEventAbsolute = event.absolute ?? null;
+  state.lastScreenAngle = screenAngle;
 
   const hasReliableWebkitHeading = Number.isFinite(event.webkitCompassHeading)
     && (!Number.isFinite(event.webkitCompassAccuracy) || event.webkitCompassAccuracy >= 0);
@@ -652,6 +664,7 @@ function handleOrientation(event) {
   if (heading === null) return;
 
   const normalizedHeading = normalizeHeading(heading);
+  state.lastNormalizedHeading = normalizedHeading;
 
   if (state.heading === null) {
     if (state.orientationSampleStartedAt === null) {
@@ -936,6 +949,7 @@ function renderRadar(unvisited) {
 
     const marker = document.createElement("span");
     marker.className = "marker";
+    marker.dataset.name = location.name;
     marker.dataset.bearing = String(bearing);
     marker.dataset.radiusPercent = String(radiusPercent);
     marker.style.setProperty("--marker-color", location.color);
@@ -959,16 +973,34 @@ function updateRadarOrientation() {
 function positionRadarMarker(marker) {
   const bearing = Number(marker.dataset.bearing);
   const radiusPercent = Number(marker.dataset.radiusPercent);
-  const position = getRadarPoint(bearing, getDisplayHeading(), radiusPercent);
+  const displayHeading = getDisplayHeading();
+  const relativeBearing = bearing - displayHeading;
+  const angle = (relativeBearing - 90) * Math.PI / 180;
+  const position = {
+    left: 50 + Math.cos(angle) * radiusPercent,
+    top: 50 + Math.sin(angle) * radiusPercent,
+  };
 
   marker.style.left = `${position.left}%`;
   marker.style.top = `${position.top}%`;
+  logHeadingDebug({
+    markerName: marker.dataset.name ?? "",
+    bearing,
+    displayHeading,
+    relativeBearing,
+  });
 }
 
 function positionCompassLabel(label) {
   const bearing = Number(label.dataset.bearing);
   const radiusPercent = 42;
-  const position = getRadarPoint(bearing, getDisplayHeading(), radiusPercent);
+  const displayHeading = getDisplayHeading();
+  const relativeBearing = bearing - displayHeading;
+  const angle = (relativeBearing - 90) * Math.PI / 180;
+  const position = {
+    left: 50 + Math.cos(angle) * radiusPercent,
+    top: 50 + Math.sin(angle) * radiusPercent,
+  };
 
   label.style.left = `${position.left}%`;
   label.style.top = `${position.top}%`;
@@ -989,6 +1021,26 @@ function getRadarPoint(bearing, heading, radiusPercent) {
   };
 }
 
+function logHeadingDebug({ markerName, bearing, displayHeading, relativeBearing }) {
+  if (!DEBUG_HEADING) return;
+
+  console.log("[radar-heading]", {
+    markerName,
+    screenAngle: state.lastScreenAngle,
+    eventWebkitCompassHeading: state.lastRawWebkitCompassHeading,
+    eventAlpha: state.lastRawAlpha,
+    eventAbsolute: state.lastEventAbsolute,
+    orientationEventName: state.orientationEventName,
+    stateHeading: state.heading,
+    displayHeading,
+    bearing,
+    relativeBearing,
+    normalizedHeading: state.lastNormalizedHeading,
+    useScreenAngleCompensation: USE_SCREEN_ANGLE_COMPENSATION,
+    headingDisplayOffsetDegrees: HEADING_DISPLAY_OFFSET_DEGREES,
+  });
+}
+
 function debugRadarHeadingTest(radiusPercent = 40) {
   const bearings = [0, 90, 180, 270];
   const cases = [
@@ -999,6 +1051,8 @@ function debugRadarHeadingTest(radiusPercent = 40) {
   return cases.map(({ heading, expected }) => ({
     heading,
     expected,
+    useScreenAngleCompensation: USE_SCREEN_ANGLE_COMPENSATION,
+    headingDisplayOffsetDegrees: HEADING_DISPLAY_OFFSET_DEGREES,
     points: Object.fromEntries(
       bearings.map((bearing) => {
         const point = getRadarPoint(bearing, heading, radiusPercent);
