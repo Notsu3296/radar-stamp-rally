@@ -24,6 +24,7 @@ const state = {
   latestPosition: null,
   positionWatchId: null,
   positionRefreshTimerId: null,
+  locationUpdateInProgress: false,
   heading: null,
   lockedHeading: null,
   radarDotsVisible: false,
@@ -100,7 +101,13 @@ async function init() {
 function bindEvents() {
   elements.menuButton.addEventListener("click", toggleMenu);
   elements.qrScanButton.addEventListener("click", openQrScanner);
-  elements.locateIconButton.addEventListener("click", updateCurrentLocation);
+  elements.locateIconButton?.addEventListener("click", updateCurrentLocation);
+  elements.radar.addEventListener("click", updateCurrentLocation);
+  elements.radar.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    updateCurrentLocation();
+  });
   elements.closeMenuButton.addEventListener("click", closeMenu);
   elements.menuBackdrop.addEventListener("click", closeMenu);
   elements.closeDetailButton.addEventListener("click", closeDetailPanel);
@@ -417,7 +424,7 @@ function renderGuideDetail() {
 
   const items = [
     ["レーダーを見る", "最も近い未訪問スポットの反応方向が、8方向程度のグラデーションで表示されます。表示範囲バーで反応の強さの目安を切り替えられます。"],
-    ["反応を更新", "レーダーは約5秒ごとに更新されます。画面右下の照準アイコンを押すと、現在地と反応をすぐに更新できます。GPS精度は画面左下に表示されます。"],
+    ["反応を更新", "レーダーは約5秒ごとに更新されます。レーダー盤面をタップすると、現在地と反応をすぐに更新できます。"],
     ["QRでチェックイン", "建物内やGPSが不安定な場所では、上部のQR CHECK-INからチェックインします。"],
     ["カードを集める", "チェックインした地点は地点履歴に残り、メダルカードをいつでも見返せます。"],
   ];
@@ -569,9 +576,14 @@ function renderHistoryDetail() {
 }
 
 async function updateCurrentLocation() {
+  if (state.locationUpdateInProgress) return;
+  state.locationUpdateInProgress = true;
   await startOrientationTracking(true);
-  elements.locateIconButton.disabled = true;
-  elements.locateIconButton.setAttribute("aria-busy", "true");
+  if (elements.locateIconButton) {
+    elements.locateIconButton.disabled = true;
+    elements.locateIconButton.setAttribute("aria-busy", "true");
+  }
+  elements.radar.setAttribute("aria-busy", "true");
   elements.locationSummary.textContent = "反応を更新しています。立ち止まって周囲を確認してください。";
   elements.locationSummary.classList.remove("hidden");
 
@@ -600,8 +612,12 @@ async function updateCurrentLocation() {
     render();
     pulseRadar();
   } finally {
-    elements.locateIconButton.disabled = false;
-    elements.locateIconButton.removeAttribute("aria-busy");
+    state.locationUpdateInProgress = false;
+    if (elements.locateIconButton) {
+      elements.locateIconButton.disabled = false;
+      elements.locateIconButton.removeAttribute("aria-busy");
+    }
+    elements.radar.removeAttribute("aria-busy");
   }
 }
 
@@ -702,8 +718,10 @@ function renderResetDetail() {
 }
 
 function ensureStatusElements() {
-  elements.locateIconButton.setAttribute("aria-label", "反応を更新");
-  elements.locateIconButton.setAttribute("title", "反応を更新");
+  if (elements.locateIconButton) {
+    elements.locateIconButton.setAttribute("aria-label", "現在地を取得");
+    elements.locateIconButton.setAttribute("title", "現在地を取得");
+  }
   if (!elements.gpsAccuracyBadge.dataset.level) {
     elements.gpsAccuracyBadge.dataset.level = "unknown";
   }
@@ -728,7 +746,7 @@ function ensureStatusElements() {
     elements.radarHint = document.createElement("div");
     elements.radarHint.id = "radarHint";
     elements.radarHint.className = "radar-hint";
-    elements.radarHint.textContent = "現在地を取得すると、近くの反応方向が表示されます。";
+    elements.radarHint.textContent = "レーダーをタップすると、近くの反応方向が表示されます。";
     elements.radar.append(elements.radarHint);
   }
 
@@ -1093,7 +1111,7 @@ function renderSummary(unvisited) {
   if (!state.locations.length) return;
 
   if (!state.currentPosition) {
-    elements.locationSummary.textContent = "現在地を取得するとレーダーに方向が表示されます。";
+    elements.locationSummary.textContent = "レーダーをタップすると反応方向が表示されます。";
     return;
   }
 
@@ -1107,7 +1125,7 @@ function renderRadar(unvisited) {
   elements.radar.classList.remove("is-detecting", "has-reaction");
 
   if (!state.currentPosition) {
-    elements.radarHint.textContent = "現在地を取得すると、近くの反応方向が表示されます。";
+    elements.radarHint.textContent = "レーダーをタップすると、近くの反応方向が表示されます。";
     elements.radarHint.hidden = false;
     return;
   }
