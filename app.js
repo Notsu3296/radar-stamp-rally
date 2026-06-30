@@ -13,22 +13,17 @@ const RADAR_RANGE_LABELS = {
 };
 const RADAR_DOT_VISIBLE_MS = 10000;
 const RADAR_DOT_FADE_MS = 5000;
+const RADAR_REFRESH_MS = 5000;
 const DEBUG_HEADING = false;
 const USE_SCREEN_ANGLE_COMPENSATION = false;
-const HEADING_DISPLAY_OFFSET_DEGREES = 180;
-const CATEGORY_COLORS = {
-  ハンビータウン店: "#a78bfa",
-  飲食店: "#ff7b7b",
-  小売店: "#62e6a8",
-  観光地: "#f6c65b",
-};
-
+const HEADING_DISPLAY_OFFSET_DEGREES = 0;
 const state = {
   locations: [],
   visits: loadVisits(),
   currentPosition: null,
   latestPosition: null,
   positionWatchId: null,
+  positionRefreshTimerId: null,
   heading: null,
   lockedHeading: null,
   radarDotsVisible: false,
@@ -47,6 +42,7 @@ const state = {
   showLabels: false,
   radarRangeMode: "normal",
   pendingRadarRangeMode: null,
+  categoryColors: new Map(),
   visibleCategories: new Set(),
   activeDetailSection: null,
   qrStream: null,
@@ -102,7 +98,7 @@ async function init() {
 }
 
 function bindEvents() {
-  elements.menuButton.addEventListener("click", openMenu);
+  elements.menuButton.addEventListener("click", toggleMenu);
   elements.qrScanButton.addEventListener("click", openQrScanner);
   elements.locateIconButton.addEventListener("click", updateCurrentLocation);
   elements.closeMenuButton.addEventListener("click", closeMenu);
@@ -126,6 +122,14 @@ function bindEvents() {
   elements.rangeSlider.addEventListener("input", () => {
     setRadarRange(RADAR_RANGE_ORDER[Number(elements.rangeSlider.value)]);
   });
+}
+
+function toggleMenu() {
+  if (elements.actionPanel.classList.contains("is-open")) {
+    closeMenu();
+  } else {
+    openMenu();
+  }
 }
 
 function openMenu() {
@@ -412,8 +416,8 @@ function renderGuideDetail() {
   guide.className = "guide-list";
 
   const items = [
-    ["レーダーを見る", "未訪問スポットがレーダーに表示されます。表示範囲バーで、詳細・通常・広域を切り替えられます。"],
-    ["探知", "立ち止まって周囲を確認してから、画面右下の照準アイコンで探知します。周辺の反応は10秒間だけ表示されます。GPS精度は画面左下に表示されます。"],
+    ["レーダーを見る", "最も近い未訪問スポットの反応方向が、8方向程度のグラデーションで表示されます。表示範囲バーで反応の強さの目安を切り替えられます。"],
+    ["反応を更新", "レーダーは約5秒ごとに更新されます。画面右下の照準アイコンを押すと、現在地と反応をすぐに更新できます。GPS精度は画面左下に表示されます。"],
     ["QRでチェックイン", "建物内やGPSが不安定な場所では、上部のQR CHECK-INからチェックインします。"],
     ["カードを集める", "チェックインした地点は地点履歴に残り、メダルカードをいつでも見返せます。"],
   ];
@@ -451,7 +455,7 @@ function renderCategoryDetail() {
     const isVisible = state.visibleCategories.has(category);
     button.type = "button";
     button.className = "menu-option-button category-option";
-    button.style.setProperty("--category-color", CATEGORY_COLORS[category]);
+    button.style.setProperty("--category-color", state.categoryColors.get(category) ?? "#70ffd6");
     button.textContent = category;
     button.setAttribute("aria-pressed", String(isVisible));
     button.classList.toggle("selected", isVisible);
@@ -568,7 +572,7 @@ async function updateCurrentLocation() {
   await startOrientationTracking(true);
   elements.locateIconButton.disabled = true;
   elements.locateIconButton.setAttribute("aria-busy", "true");
-  elements.locationSummary.textContent = "探知しています。立ち止まって周囲を確認してください。";
+  elements.locationSummary.textContent = "反応を更新しています。立ち止まって周囲を確認してください。";
   elements.locationSummary.classList.remove("hidden");
 
   try {
@@ -587,14 +591,12 @@ async function updateCurrentLocation() {
     }
 
     if (!state.currentPosition) {
-      state.radarDotsVisible = false;
-      state.radarDotsFading = false;
       render();
       return;
     }
 
-    state.lockedHeading = heading ?? state.heading;
-    startRadarDotDisplay();
+    state.heading = heading ?? state.heading;
+    state.lockedHeading = null;
     render();
     pulseRadar();
   } finally {
@@ -700,8 +702,14 @@ function renderResetDetail() {
 }
 
 function ensureStatusElements() {
-  elements.locateIconButton.setAttribute("aria-label", "探知");
-  elements.locateIconButton.setAttribute("title", "探知");
+  elements.locateIconButton.setAttribute("aria-label", "反応を更新");
+  elements.locateIconButton.setAttribute("title", "反応を更新");
+  if (!elements.gpsAccuracyBadge.dataset.level) {
+    elements.gpsAccuracyBadge.dataset.level = "unknown";
+  }
+  if (!elements.gpsAccuracyBadge.title) {
+    elements.gpsAccuracyBadge.title = "GPS 未受信";
+  }
 
   if (!elements.qrNotice) {
     elements.qrNotice = document.createElement("div");
@@ -720,7 +728,7 @@ function ensureStatusElements() {
     elements.radarHint = document.createElement("div");
     elements.radarHint.id = "radarHint";
     elements.radarHint.className = "radar-hint";
-    elements.radarHint.textContent = "立ち止まって周囲を確認してから探知してください。探知すると周辺の反応を10秒間表示します。";
+    elements.radarHint.textContent = "現在地を取得すると、近くの反応方向が表示されます。";
     elements.radar.append(elements.radarHint);
   }
 
@@ -854,7 +862,8 @@ async function loadLocations() {
     throw new Error(`CSVには ${required.join(", ")} の列が必要です`);
   }
 
-  return records.map((record, index) => {
+  const categoryColors = new Map();
+  const locations = records.map((record, index) => {
     const values = Object.fromEntries(header.map((name, columnIndex) => [name, record[columnIndex]?.trim() ?? ""]));
     const latitude = Number(values["緯度"]);
     const longitude = Number(values["経度"]);
@@ -862,11 +871,12 @@ async function loadLocations() {
     const category = values["カテゴリ"];
     const color = values["表示色"];
 
-    const hasValidCategoryColor = Object.prototype.hasOwnProperty.call(CATEGORY_COLORS, category)
-      && color.toLowerCase() === CATEGORY_COLORS[category];
-
-    if (!values["地点名"] || !hasValidCategoryColor || !Number.isFinite(latitude) || !Number.isFinite(longitude) || !Number.isFinite(radius) || !values.UUID) {
+    if (!values["地点名"] || !category || !color || !Number.isFinite(latitude) || !Number.isFinite(longitude) || !Number.isFinite(radius) || !values.UUID) {
       throw new Error(`CSVの${index + 2}行目に不正な値があります`);
+    }
+
+    if (!categoryColors.has(category)) {
+      categoryColors.set(category, color);
     }
 
     return {
@@ -876,9 +886,12 @@ async function loadLocations() {
       latitude,
       longitude,
       radius,
-      color,
+      color: categoryColors.get(category),
     };
   });
+
+  state.categoryColors = categoryColors;
+  return locations;
 }
 
 function parseCsv(text) {
@@ -969,6 +982,12 @@ function startPositionTracking(applyImmediately = false) {
       options,
     );
   }
+
+  if (state.positionRefreshTimerId === null) {
+    state.positionRefreshTimerId = window.setInterval(() => {
+      applyLatestPosition();
+    }, RADAR_REFRESH_MS);
+  }
 }
 
 function storeLatestPosition(position) {
@@ -985,7 +1004,8 @@ function handlePositionError(error) {
 
   elements.locationSummary.textContent = getGeolocationErrorMessage(error);
   elements.locationSummary.classList.remove("hidden");
-  elements.gpsAccuracyBadge.textContent = "GPS 取得失敗";
+  elements.gpsAccuracyBadge.textContent = "GPS 低";
+  elements.gpsAccuracyBadge.title = "GPS 取得失敗";
   elements.gpsAccuracyBadge.dataset.level = "low";
 }
 
@@ -1013,28 +1033,31 @@ function getGeolocationErrorMessage(error) {
 
 function updateGpsAccuracyBadge() {
   if (!state.currentPosition) {
-    elements.gpsAccuracyBadge.textContent = "GPS 未取得";
+    elements.gpsAccuracyBadge.textContent = "GPS --";
+    elements.gpsAccuracyBadge.title = "GPS 未受信";
     elements.gpsAccuracyBadge.dataset.level = "unknown";
     return;
   }
 
   const accuracy = state.currentPosition.accuracy;
   if (!Number.isFinite(accuracy)) {
-    elements.gpsAccuracyBadge.textContent = "GPS 精度不明";
+    elements.gpsAccuracyBadge.textContent = "GPS --";
+    elements.gpsAccuracyBadge.title = "GPS 精度不明";
     elements.gpsAccuracyBadge.dataset.level = "unknown";
     return;
   }
 
   const roundedAccuracy = Math.round(accuracy);
   const level = getGpsAccuracyLevel(accuracy);
-  elements.gpsAccuracyBadge.textContent = `GPS ${level.label}・約${roundedAccuracy}m`;
+  elements.gpsAccuracyBadge.textContent = `GPS ${level.label}`;
+  elements.gpsAccuracyBadge.title = `GPS ${level.label}・約${roundedAccuracy}m`;
   elements.gpsAccuracyBadge.dataset.level = level.key;
 }
 
 function getGpsAccuracyLevel(accuracy) {
-  if (accuracy <= 20) return { key: "high", label: "受信状況 高" };
-  if (accuracy <= 60) return { key: "medium", label: "受信状況 普通" };
-  return { key: "low", label: "受信状況 低" };
+  if (accuracy <= 20) return { key: "high", label: "高" };
+  if (accuracy <= 60) return { key: "medium", label: "中" };
+  return { key: "low", label: "低" };
 }
 
 function render() {
@@ -1051,6 +1074,21 @@ function getVisibleUnvisitedLocations() {
   ));
 }
 
+function getNearestLocation(locations) {
+  if (!state.currentPosition) return null;
+
+  return locations.reduce((nearest, location) => {
+    const distance = getDistanceMeters(state.currentPosition, location);
+    if (nearest && distance >= nearest.distance) return nearest;
+
+    return {
+      location,
+      distance,
+      bearing: getBearingDegrees(state.currentPosition, location),
+    };
+  }, null);
+}
+
 function renderSummary(unvisited) {
   if (!state.locations.length) return;
 
@@ -1065,56 +1103,54 @@ function renderSummary(unvisited) {
 
 function renderRadar(unvisited) {
   elements.radarMarkers.replaceChildren();
-  elements.radarMarkers.classList.toggle("is-fading", state.radarDotsFading);
-  elements.radarHint.hidden = state.radarDotsVisible;
-  if (!state.radarDotsVisible || !state.currentPosition) return;
+  elements.radarMarkers.classList.remove("is-fading");
+  elements.radar.classList.remove("is-detecting", "has-reaction");
+
+  if (!state.currentPosition) {
+    elements.radarHint.textContent = "現在地を取得すると、近くの反応方向が表示されます。";
+    elements.radarHint.hidden = false;
+    return;
+  }
+
+  const nearest = getNearestLocation(unvisited);
+  if (!nearest) {
+    elements.radarHint.textContent = "記録できる反応はありません。";
+    elements.radarHint.hidden = false;
+    return;
+  }
 
   const maxDistanceMeters = RADAR_RANGES[state.radarRangeMode];
+  const distanceRatio = Math.min(nearest.distance / maxDistanceMeters, 1);
+  const strength = 1 - distanceRatio;
+  const gradient = document.createElement("span");
+  gradient.className = "reaction-gradient";
+  gradient.dataset.name = nearest.location.name;
+  gradient.dataset.bearing = String(nearest.bearing);
+  gradient.setAttribute("aria-hidden", "true");
+  gradient.style.setProperty("--reaction-rgb", "142, 83, 31");
+  gradient.style.setProperty("--reaction-alpha-strong", String(0.26 + strength * 0.46));
+  gradient.style.setProperty("--reaction-alpha-soft", String(0.08 + strength * 0.24));
+  positionReactionGradient(gradient);
 
-  unvisited.forEach((location) => {
-    const distance = getDistanceMeters(state.currentPosition, location);
-    const bearing = getBearingDegrees(state.currentPosition, location);
-    const distanceRatio = Math.min(distance / maxDistanceMeters, 1);
-    const radiusPercent = 46 * distanceRatio;
-
-    const marker = document.createElement("span");
-    marker.className = "marker";
-    marker.dataset.name = location.name;
-    marker.dataset.bearing = String(bearing);
-    marker.dataset.radiusPercent = String(radiusPercent);
-    marker.style.setProperty("--marker-color", location.color);
-    marker.setAttribute("aria-hidden", "true");
-
-    const label = document.createElement("span");
-    label.className = "marker-label";
-    label.textContent = location.name;
-    marker.append(label);
-
-    positionRadarMarker(marker);
-    elements.radarMarkers.append(marker);
-  });
+  elements.radarHint.hidden = true;
+  elements.radar.classList.add("has-reaction");
+  elements.radarMarkers.append(gradient);
 }
 
 function updateRadarOrientation() {
-  elements.radarMarkers.querySelectorAll(".marker").forEach(positionRadarMarker);
+  elements.radarMarkers.querySelectorAll(".reaction-gradient").forEach(positionReactionGradient);
   elements.compassLabels.querySelectorAll("[data-bearing]").forEach(positionCompassLabel);
 }
 
-function positionRadarMarker(marker) {
-  const bearing = Number(marker.dataset.bearing);
-  const radiusPercent = Number(marker.dataset.radiusPercent);
+function positionReactionGradient(gradient) {
+  const bearing = Number(gradient.dataset.bearing);
   const displayHeading = getDisplayHeading();
   const relativeBearing = bearing - displayHeading;
-  const angle = (relativeBearing - 90) * Math.PI / 180;
-  const position = {
-    left: 50 + Math.cos(angle) * radiusPercent,
-    top: 50 + Math.sin(angle) * radiusPercent,
-  };
+  const reactionAngle = quantizeToEightDirections(relativeBearing);
 
-  marker.style.left = `${position.left}%`;
-  marker.style.top = `${position.top}%`;
+  gradient.style.setProperty("--reaction-angle", `${reactionAngle}deg`);
   logHeadingDebug({
-    markerName: marker.dataset.name ?? "",
+    markerName: gradient.dataset.name ?? "",
     bearing,
     displayHeading,
     relativeBearing,
@@ -1140,6 +1176,14 @@ function getDisplayHeading() {
   const heading = state.lockedHeading ?? state.heading;
   if (heading === null) return 0;
   return normalizeHeading(heading + HEADING_DISPLAY_OFFSET_DEGREES);
+}
+
+function quantizeToEightDirections(angle) {
+  return Math.round(getSignedAngleDegrees(angle) / 45) * 45;
+}
+
+function getSignedAngleDegrees(angle) {
+  return ((angle % 360) + 540) % 360 - 180;
 }
 
 function getRadarPoint(bearing, heading, radiusPercent) {

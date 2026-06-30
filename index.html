@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>レーダー</title>
-    <link rel="stylesheet" href="styles.css?v=20260625-5">
+    <link rel="stylesheet" href="styles.css?v=20260630-3">
   </head>
   <body>
     <main class="app-shell">
@@ -34,6 +34,9 @@
             <div class="radar-axis axis-h"></div>
             <div class="radar-center"></div>
             <div id="radarMarkers"></div>
+            <button id="locateIconButton" class="locate-icon-button" type="button" aria-label="探知" title="探知">
+              <span aria-hidden="true">⌖</span>
+            </button>
           </div>
         </div>
         <div class="range-console" aria-label="表示範囲">
@@ -65,9 +68,6 @@
       </section>
       <div id="menuBackdrop" class="menu-backdrop" hidden></div>
 
-      <button id="locateIconButton" class="locate-icon-button" type="button" aria-label="探知" title="探知">
-        <span aria-hidden="true">⌖</span>
-      </button>
       <div id="gpsAccuracyBadge" class="gps-accuracy-badge" aria-live="polite">GPS 未取得</div>
 
       <section id="detailPanel" class="detail-panel hidden" aria-live="polite" aria-label="メニュー詳細">
@@ -85,6 +85,6 @@
       <div id="detailBackdrop" class="detail-backdrop" hidden></div>
     </main>
 
-    <script src="app.js?v=20260625-5" defer></script>
+    <script src="app.js?v=20260630-3" defer></script>
   </body>
 </html>
