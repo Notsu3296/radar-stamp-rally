@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>レーダー</title>
-    <link rel="stylesheet" href="styles.css?v=20260630-5">
+    <link rel="stylesheet" href="styles.css?v=20260701-1">
   </head>
   <body>
     <main class="app-shell">
@@ -34,6 +34,7 @@
             <div class="radar-axis axis-h"></div>
             <div class="radar-center"></div>
             <div id="radarMarkers"></div>
+            <div id="nearestReactionName" class="nearest-reaction-name" hidden></div>
           </div>
         </div>
         <div class="range-console" aria-label="表示範囲">
@@ -57,6 +58,7 @@
         </div>
         <div class="controls">
           <button class="secondary-button menu-item-button" type="button" data-detail="guide">楽しみ方</button>
+          <button class="secondary-button menu-item-button" type="button" data-detail="radar">レーダー表示</button>
           <button class="secondary-button menu-item-button" type="button" data-detail="category">カテゴリ表示</button>
           <button class="secondary-button menu-item-button" type="button" data-detail="labels">地点名表示</button>
           <button class="secondary-button menu-item-button" type="button" data-detail="history">地点履歴</button>
@@ -66,6 +68,18 @@
       <div id="menuBackdrop" class="menu-backdrop" hidden></div>
 
       <div id="gpsAccuracyBadge" class="gps-accuracy-badge" aria-live="polite">GPS 未取得</div>
+      <button id="debugButton" class="debug-button" type="button" aria-controls="debugPanel" aria-expanded="false">DEBUG</button>
+
+      <section id="debugPanel" class="debug-panel" aria-live="polite" aria-label="デバッグメニュー">
+        <div class="debug-window">
+          <div class="debug-head">
+            <span>DEBUG LAB</span>
+            <button id="closeDebugButton" class="debug-close-button" type="button" aria-label="デバッグメニューを閉じる">×</button>
+          </div>
+          <div id="debugBody" class="debug-body"></div>
+        </div>
+      </section>
+      <div id="debugBackdrop" class="debug-backdrop" hidden></div>
 
       <section id="detailPanel" class="detail-panel hidden" aria-live="polite" aria-label="メニュー詳細">
         <div class="detail-window">
@@ -82,6 +96,6 @@
       <div id="detailBackdrop" class="detail-backdrop" hidden></div>
     </main>
 
-    <script src="app.js?v=20260630-5" defer></script>
+    <script src="app.js?v=20260701-1" defer></script>
   </body>
 </html>

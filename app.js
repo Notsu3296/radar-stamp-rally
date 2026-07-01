@@ -17,6 +17,18 @@ const RADAR_REFRESH_MS = 5000;
 const DEBUG_HEADING = false;
 const USE_SCREEN_ANGLE_COMPENSATION = false;
 const HEADING_DISPLAY_OFFSET_DEGREES = 0;
+const RADAR_DISPLAY_MODES = {
+  dotsAlways: "地点ドットを常時表示",
+  dotsTimed: "インタラクト時だけ10秒表示",
+  gradient: "最も近い地点をグラデーション表示",
+};
+const RADAR_DISPLAY_MODE_ORDER = ["dotsAlways", "dotsTimed", "gradient"];
+const DEBUG_POSITION = {
+  latitude: 35.744925546192356,
+  longitude: 139.75255687018236,
+  accuracy: 1,
+  timestamp: Date.now(),
+};
 const state = {
   locations: [],
   visits: loadVisits(),
@@ -42,10 +54,13 @@ const state = {
   orientationEventName: null,
   showLabels: false,
   radarRangeMode: "normal",
+  radarDisplayMode: "gradient",
   pendingRadarRangeMode: null,
   categoryColors: new Map(),
   visibleCategories: new Set(),
+  reactionCategories: new Set(),
   activeDetailSection: null,
+  debugMode: false,
   qrStream: null,
   qrScanFrameId: null,
   qrDetector: null,
@@ -72,6 +87,12 @@ const elements = {
   rangeSlider: document.querySelector("#rangeSlider"),
   rangeModeLabel: document.querySelector("#rangeModeLabel"),
   gpsAccuracyBadge: document.querySelector("#gpsAccuracyBadge"),
+  nearestReactionName: document.querySelector("#nearestReactionName"),
+  debugButton: document.querySelector("#debugButton"),
+  debugPanel: document.querySelector("#debugPanel"),
+  debugBackdrop: document.querySelector("#debugBackdrop"),
+  closeDebugButton: document.querySelector("#closeDebugButton"),
+  debugBody: document.querySelector("#debugBody"),
   qrNotice: null,
   locationSummary: null,
   radarHint: null,
@@ -88,6 +109,7 @@ async function init() {
   try {
     state.locations = await loadLocations();
     state.visibleCategories = new Set(state.locations.map((location) => location.category));
+    state.reactionCategories = new Set(state.locations.map((location) => location.category));
     await handleQrVisit();
     render();
     startPositionTracking();
@@ -102,12 +124,18 @@ function bindEvents() {
   elements.menuButton.addEventListener("click", toggleMenu);
   elements.qrScanButton.addEventListener("click", openQrScanner);
   elements.locateIconButton?.addEventListener("click", updateCurrentLocation);
-  elements.radar.addEventListener("click", updateCurrentLocation);
+  elements.radar.addEventListener("click", (event) => {
+    if (event.target.closest("button, input, select, textarea, a")) return;
+    updateCurrentLocation();
+  });
   elements.radar.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
     updateCurrentLocation();
   });
+  elements.debugButton.addEventListener("click", toggleDebugPanel);
+  elements.closeDebugButton.addEventListener("click", closeDebugPanel);
+  elements.debugBackdrop.addEventListener("click", closeDebugPanel);
   elements.closeMenuButton.addEventListener("click", closeMenu);
   elements.menuBackdrop.addEventListener("click", closeMenu);
   elements.closeDetailButton.addEventListener("click", closeDetailPanel);
@@ -151,6 +179,27 @@ function closeMenu() {
   elements.menuButton.setAttribute("aria-expanded", "false");
 }
 
+function toggleDebugPanel() {
+  if (elements.debugPanel.classList.contains("is-open")) {
+    closeDebugPanel();
+  } else {
+    openDebugPanel();
+  }
+}
+
+function openDebugPanel() {
+  renderDebugPanel();
+  elements.debugPanel.classList.add("is-open");
+  elements.debugBackdrop.hidden = false;
+  elements.debugButton.setAttribute("aria-expanded", "true");
+}
+
+function closeDebugPanel() {
+  elements.debugPanel.classList.remove("is-open");
+  elements.debugBackdrop.hidden = true;
+  elements.debugButton.setAttribute("aria-expanded", "false");
+}
+
 function setRadarRange(mode) {
   if (!RADAR_RANGES[mode]) return;
 
@@ -181,6 +230,9 @@ function renderDetailPanel(section) {
   if (section === "guide") {
     elements.detailTitle.textContent = "楽しみ方";
     renderGuideDetail();
+  } else if (section === "radar") {
+    elements.detailTitle.textContent = "レーダー表示";
+    renderRadarDisplayDetail();
   } else if (section === "category") {
     elements.detailTitle.textContent = "カテゴリ表示";
     renderCategoryDetail();
@@ -446,38 +498,99 @@ function renderGuideDetail() {
   elements.detailBody.append(guide);
 }
 
-function renderCategoryDetail() {
+function renderRadarDisplayDetail() {
   elements.detailBody.replaceChildren();
 
   const lead = document.createElement("p");
   lead.className = "detail-note";
-  lead.textContent = "レーダーに表示するカテゴリを切り替えます。";
+  lead.textContent = "レーダーの反応表示方法を切り替えます。探索の雰囲気や検証目的に合わせて選んでください。";
 
   const options = document.createElement("div");
   options.className = "option-list";
-  const categories = [...new Set(state.locations.map((location) => location.category))];
 
-  categories.forEach((category) => {
+  RADAR_DISPLAY_MODE_ORDER.forEach((mode) => {
     const button = document.createElement("button");
-    const isVisible = state.visibleCategories.has(category);
+    const isSelected = state.radarDisplayMode === mode;
     button.type = "button";
-    button.className = "menu-option-button category-option";
-    button.style.setProperty("--category-color", state.categoryColors.get(category) ?? "#70ffd6");
-    button.textContent = category;
-    button.setAttribute("aria-pressed", String(isVisible));
-    button.classList.toggle("selected", isVisible);
-    button.addEventListener("click", () => toggleCategory(category));
+    button.className = "menu-option-button";
+    button.textContent = RADAR_DISPLAY_MODES[mode];
+    button.setAttribute("aria-pressed", String(isSelected));
+    button.classList.toggle("selected", isSelected);
+    button.addEventListener("click", () => {
+      setRadarDisplayMode(mode);
+      renderRadarDisplayDetail();
+    });
     options.append(button);
   });
 
   elements.detailBody.append(lead, options);
 }
 
-function toggleCategory(category) {
-  if (state.visibleCategories.has(category)) {
-    state.visibleCategories.delete(category);
+function setRadarDisplayMode(mode) {
+  if (!RADAR_DISPLAY_MODES[mode]) return;
+
+  state.radarDisplayMode = mode;
+  if (mode !== "dotsTimed") {
+    clearRadarDotTimers();
+    state.radarDotsVisible = false;
+    state.radarDotsFading = false;
+  }
+
+  render();
+  pulseRadar();
+}
+
+function renderCategoryDetail() {
+  elements.detailBody.replaceChildren();
+
+  const lead = document.createElement("p");
+  lead.className = "detail-note";
+  lead.textContent = "カテゴリごとに、地点ドットの表示とグラデーション反応の対象を別々に切り替えます。";
+
+  const options = document.createElement("div");
+  options.className = "category-control-list";
+  const categories = [...new Set(state.locations.map((location) => location.category))];
+
+  categories.forEach((category) => {
+    const isVisible = state.visibleCategories.has(category);
+    const isReactive = state.reactionCategories.has(category);
+    const row = document.createElement("section");
+    row.className = "category-control-row";
+    row.style.setProperty("--category-color", state.categoryColors.get(category) ?? "#70ffd6");
+
+    const name = document.createElement("strong");
+    name.className = "category-control-name";
+    name.textContent = category;
+
+    const displayButton = document.createElement("button");
+    displayButton.type = "button";
+    displayButton.className = "menu-option-button category-toggle-button";
+    displayButton.textContent = isVisible ? "表示中" : "非表示";
+    displayButton.setAttribute("aria-pressed", String(isVisible));
+    displayButton.classList.toggle("selected", isVisible);
+    displayButton.addEventListener("click", () => toggleCategory(category, "display"));
+
+    const reactionButton = document.createElement("button");
+    reactionButton.type = "button";
+    reactionButton.className = "menu-option-button category-toggle-button";
+    reactionButton.textContent = isReactive ? "反応対象" : "反応除外";
+    reactionButton.setAttribute("aria-pressed", String(isReactive));
+    reactionButton.classList.toggle("selected", isReactive);
+    reactionButton.addEventListener("click", () => toggleCategory(category, "reaction"));
+
+    row.append(name, displayButton, reactionButton);
+    options.append(row);
+  });
+
+  elements.detailBody.append(lead, options);
+}
+
+function toggleCategory(category, target = "display") {
+  const categorySet = target === "reaction" ? state.reactionCategories : state.visibleCategories;
+  if (categorySet.has(category)) {
+    categorySet.delete(category);
   } else {
-    state.visibleCategories.add(category);
+    categorySet.add(category);
   }
 
   render();
@@ -577,6 +690,16 @@ function renderHistoryDetail() {
 
 async function updateCurrentLocation() {
   if (state.locationUpdateInProgress) return;
+  if (state.debugMode) {
+    injectDebugPosition();
+    if (state.radarDisplayMode === "dotsTimed") {
+      startRadarDotDisplay();
+    }
+    render();
+    pulseRadar();
+    return;
+  }
+
   state.locationUpdateInProgress = true;
   await startOrientationTracking(true);
   if (elements.locateIconButton) {
@@ -608,7 +731,10 @@ async function updateCurrentLocation() {
     }
 
     state.heading = heading ?? state.heading;
-    state.lockedHeading = null;
+    state.lockedHeading = state.heading;
+    if (state.radarDisplayMode === "dotsTimed") {
+      startRadarDotDisplay();
+    }
     render();
     pulseRadar();
   } finally {
@@ -657,6 +783,115 @@ function getCurrentPositionForDetection() {
       options,
     );
   });
+}
+
+function rotateRadarHeading(deltaDegrees) {
+  const baseHeading = state.lockedHeading ?? state.heading ?? 0;
+  state.lockedHeading = normalizeHeading(baseHeading + deltaDegrees);
+  render();
+  pulseRadar();
+}
+
+function activateNakazatoDebugMode() {
+  state.debugMode = true;
+  injectDebugPosition();
+  render();
+  pulseRadar();
+  renderDebugPanel();
+}
+
+function injectDebugPosition() {
+  state.latestPosition = { ...DEBUG_POSITION, timestamp: Date.now() };
+  state.currentPosition = { ...state.latestPosition };
+  state.heading = 0;
+  state.lockedHeading = 0;
+  updateGpsAccuracyBadge();
+}
+
+function deactivateDebugMode() {
+  state.debugMode = false;
+  state.lockedHeading = null;
+  render();
+  renderDebugPanel();
+}
+
+function renderDebugPanel() {
+  elements.debugBody.replaceChildren();
+
+  const note = document.createElement("p");
+  note.className = "debug-note";
+  note.textContent = "通常メニューとは別系統の検証用操作です。本番確認時だけ使ってください。";
+
+  const status = document.createElement("p");
+  status.className = "debug-status";
+  status.textContent = state.debugMode
+    ? "中里貝塚史跡広場 / 北向きモード: ON"
+    : "中里貝塚史跡広場 / 北向きモード: OFF";
+
+  const locationButton = document.createElement("button");
+  locationButton.type = "button";
+  locationButton.className = "debug-action-button";
+  locationButton.textContent = state.debugMode ? "デバッグ位置を再注入" : "中里貝塚＋北向きにする";
+  locationButton.addEventListener("click", activateNakazatoDebugMode);
+
+  const offButton = document.createElement("button");
+  offButton.type = "button";
+  offButton.className = "debug-action-button debug-action-subtle";
+  offButton.textContent = "デバッグモード解除";
+  offButton.disabled = !state.debugMode;
+  offButton.addEventListener("click", deactivateDebugMode);
+
+  const labelsButton = document.createElement("button");
+  labelsButton.type = "button";
+  labelsButton.className = "debug-action-button debug-action-subtle";
+  labelsButton.textContent = state.showLabels ? "地点名を非表示" : "地点名を表示";
+  labelsButton.addEventListener("click", () => {
+    toggleLocationLabels();
+    renderDebugPanel();
+  });
+
+  const rotateGroup = document.createElement("div");
+  rotateGroup.className = "debug-rotate-group";
+
+  const rotateLeftButton = document.createElement("button");
+  rotateLeftButton.type = "button";
+  rotateLeftButton.className = "debug-action-button debug-action-subtle";
+  rotateLeftButton.textContent = "↺ 45度";
+  rotateLeftButton.addEventListener("click", () => {
+    rotateRadarHeading(-45);
+    renderDebugPanel();
+  });
+
+  const rotateRightButton = document.createElement("button");
+  rotateRightButton.type = "button";
+  rotateRightButton.className = "debug-action-button debug-action-subtle";
+  rotateRightButton.textContent = "45度 ↻";
+  rotateRightButton.addEventListener("click", () => {
+    rotateRadarHeading(45);
+    renderDebugPanel();
+  });
+
+  rotateGroup.append(rotateLeftButton, rotateRightButton);
+
+  const dotsButton = document.createElement("button");
+  dotsButton.type = "button";
+  dotsButton.className = "debug-action-button debug-action-subtle";
+  dotsButton.textContent = "地点ドット常時表示に切替";
+  dotsButton.addEventListener("click", () => {
+    setRadarDisplayMode("dotsAlways");
+    renderDebugPanel();
+  });
+
+  const gradientButton = document.createElement("button");
+  gradientButton.type = "button";
+  gradientButton.className = "debug-action-button debug-action-subtle";
+  gradientButton.textContent = "グラデーション表示に切替";
+  gradientButton.addEventListener("click", () => {
+    setRadarDisplayMode("gradient");
+    renderDebugPanel();
+  });
+
+  elements.debugBody.append(note, status, locationButton, offButton, labelsButton, rotateGroup, dotsButton, gradientButton);
 }
 
 function startRadarDotDisplay() {
@@ -1009,6 +1244,8 @@ function startPositionTracking(applyImmediately = false) {
 }
 
 function storeLatestPosition(position) {
+  if (state.debugMode) return;
+
   state.latestPosition = {
     latitude: position.coords.latitude,
     longitude: position.coords.longitude,
@@ -1028,6 +1265,7 @@ function handlePositionError(error) {
 }
 
 function applyLatestPosition() {
+  if (state.debugMode) return;
   if (!state.latestPosition) return;
 
   state.currentPosition = { ...state.latestPosition };
@@ -1122,7 +1360,9 @@ function renderSummary(unvisited) {
 function renderRadar(unvisited) {
   elements.radarMarkers.replaceChildren();
   elements.radarMarkers.classList.remove("is-fading");
-  elements.radar.classList.remove("is-detecting", "has-reaction");
+  elements.radar.classList.remove("is-detecting", "has-reaction", "dots-mode", "gradient-mode");
+  elements.nearestReactionName.hidden = true;
+  elements.nearestReactionName.textContent = "";
 
   if (!state.currentPosition) {
     elements.radarHint.textContent = "レーダーをタップすると、近くの反応方向が表示されます。";
@@ -1130,9 +1370,64 @@ function renderRadar(unvisited) {
     return;
   }
 
-  const nearest = getNearestLocation(unvisited);
-  if (!nearest) {
+  if (state.radarDisplayMode === "gradient") {
+    renderGradientRadar();
+    return;
+  }
+
+  if (state.radarDisplayMode === "dotsTimed" && !state.radarDotsVisible) {
+    elements.radarHint.textContent = "レーダーをタップすると、地点ドットを10秒間表示します。";
+    elements.radarHint.hidden = false;
+    return;
+  }
+
+  renderDotRadar(unvisited);
+}
+
+function renderDotRadar(unvisited) {
+  elements.radar.classList.add("dots-mode");
+  if (!unvisited.length) {
     elements.radarHint.textContent = "記録できる反応はありません。";
+    elements.radarHint.hidden = false;
+    return;
+  }
+
+  elements.radarHint.hidden = true;
+  elements.radarMarkers.classList.toggle("is-fading", state.radarDisplayMode === "dotsTimed" && state.radarDotsFading);
+  elements.radar.classList.toggle("is-detecting", state.radarDisplayMode === "dotsTimed");
+  const maxDistanceMeters = RADAR_RANGES[state.radarRangeMode];
+  unvisited.forEach((location) => {
+    const distance = getDistanceMeters(state.currentPosition, location);
+    const bearing = getBearingDegrees(state.currentPosition, location);
+    const distanceRatio = Math.min(distance / maxDistanceMeters, 1);
+    const radiusPercent = 46 * distanceRatio;
+
+    const marker = document.createElement("span");
+    marker.className = "marker";
+    marker.dataset.name = location.name;
+    marker.dataset.bearing = String(bearing);
+    marker.dataset.radiusPercent = String(radiusPercent);
+    marker.style.setProperty("--marker-color", location.color);
+    marker.setAttribute("aria-hidden", "true");
+
+    const label = document.createElement("span");
+    label.className = "marker-label";
+    label.textContent = location.name;
+    marker.append(label);
+
+    positionRadarMarker(marker);
+    elements.radarMarkers.append(marker);
+  });
+}
+
+function renderGradientRadar() {
+  elements.radar.classList.add("gradient-mode");
+  const reactionTargets = state.locations.filter((location) => (
+    !isVisited(location.id) && state.reactionCategories.has(location.category)
+  ));
+  const nearest = getNearestLocation(reactionTargets);
+  if (!nearest) {
+    elements.radarHint.textContent = "表示対象の反応はありません。";
     elements.radarHint.hidden = false;
     return;
   }
@@ -1151,13 +1446,37 @@ function renderRadar(unvisited) {
   positionReactionGradient(gradient);
 
   elements.radarHint.hidden = true;
+  elements.nearestReactionName.textContent = nearest.location.name;
+  elements.nearestReactionName.hidden = false;
   elements.radar.classList.add("has-reaction");
   elements.radarMarkers.append(gradient);
 }
 
 function updateRadarOrientation() {
+  elements.radarMarkers.querySelectorAll(".marker").forEach(positionRadarMarker);
   elements.radarMarkers.querySelectorAll(".reaction-gradient").forEach(positionReactionGradient);
   elements.compassLabels.querySelectorAll("[data-bearing]").forEach(positionCompassLabel);
+}
+
+function positionRadarMarker(marker) {
+  const bearing = Number(marker.dataset.bearing);
+  const radiusPercent = Number(marker.dataset.radiusPercent);
+  const displayHeading = getDisplayHeading();
+  const relativeBearing = bearing - displayHeading;
+  const angle = (relativeBearing - 90) * Math.PI / 180;
+  const position = {
+    left: 50 + Math.cos(angle) * radiusPercent,
+    top: 50 + Math.sin(angle) * radiusPercent,
+  };
+
+  marker.style.left = `${position.left}%`;
+  marker.style.top = `${position.top}%`;
+  logHeadingDebug({
+    markerName: marker.dataset.name ?? "",
+    bearing,
+    displayHeading,
+    relativeBearing,
+  });
 }
 
 function positionReactionGradient(gradient) {
