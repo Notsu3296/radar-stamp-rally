@@ -39,6 +39,7 @@ const state = {
   locationUpdateInProgress: false,
   heading: null,
   lockedHeading: null,
+  headingAdjustmentDegrees: 0,
   radarDotsVisible: false,
   radarDotsFading: false,
   radarDotTimerId: null,
@@ -786,8 +787,7 @@ function getCurrentPositionForDetection() {
 }
 
 function rotateRadarHeading(deltaDegrees) {
-  const baseHeading = state.lockedHeading ?? state.heading ?? 0;
-  state.lockedHeading = normalizeHeading(baseHeading + deltaDegrees);
+  state.headingAdjustmentDegrees = getSignedAngleDegrees(state.headingAdjustmentDegrees + deltaDegrees);
   render();
   pulseRadar();
 }
@@ -805,12 +805,14 @@ function injectDebugPosition() {
   state.currentPosition = { ...state.latestPosition };
   state.heading = 0;
   state.lockedHeading = 0;
+  state.headingAdjustmentDegrees = 0;
   updateGpsAccuracyBadge();
 }
 
 function deactivateDebugMode() {
   state.debugMode = false;
   state.lockedHeading = null;
+  state.headingAdjustmentDegrees = 0;
   render();
   renderDebugPanel();
 }
@@ -824,9 +826,11 @@ function renderDebugPanel() {
 
   const status = document.createElement("p");
   status.className = "debug-status";
-  status.textContent = state.debugMode
+  const adjustmentLabel = formatSignedDegrees(state.headingAdjustmentDegrees);
+  const modeLabel = state.debugMode
     ? "中里貝塚史跡広場 / 北向きモード: ON"
     : "中里貝塚史跡広場 / 北向きモード: OFF";
+  status.textContent = `${modeLabel} / 角度補正: ${adjustmentLabel}`;
 
   const locationButton = document.createElement("button");
   locationButton.type = "button";
@@ -1512,7 +1516,13 @@ function positionCompassLabel(label) {
 function getDisplayHeading() {
   const heading = state.lockedHeading ?? state.heading;
   if (heading === null) return 0;
-  return normalizeHeading(heading + HEADING_DISPLAY_OFFSET_DEGREES);
+  return normalizeHeading(heading + HEADING_DISPLAY_OFFSET_DEGREES + state.headingAdjustmentDegrees);
+}
+
+function formatSignedDegrees(degrees) {
+  const signedDegrees = getSignedAngleDegrees(degrees);
+  if (signedDegrees === 0) return "±0°";
+  return `${signedDegrees > 0 ? "+" : ""}${signedDegrees}°`;
 }
 
 function quantizeToEightDirections(angle) {
@@ -1550,6 +1560,7 @@ function logHeadingDebug({ markerName, bearing, displayHeading, relativeBearing 
     normalizedHeading: state.lastNormalizedHeading,
     useScreenAngleCompensation: USE_SCREEN_ANGLE_COMPENSATION,
     headingDisplayOffsetDegrees: HEADING_DISPLAY_OFFSET_DEGREES,
+    headingAdjustmentDegrees: state.headingAdjustmentDegrees,
   });
 }
 
@@ -1565,6 +1576,7 @@ function debugRadarHeadingTest(radiusPercent = 40) {
     expected,
     useScreenAngleCompensation: USE_SCREEN_ANGLE_COMPENSATION,
     headingDisplayOffsetDegrees: HEADING_DISPLAY_OFFSET_DEGREES,
+    headingAdjustmentDegrees: state.headingAdjustmentDegrees,
     points: Object.fromEntries(
       bearings.map((bearing) => {
         const point = getRadarPoint(bearing, heading, radiusPercent);

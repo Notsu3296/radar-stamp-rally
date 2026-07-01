@@ -234,7 +234,7 @@ h1 {
 .debug-button {
   position: fixed;
   right: max(14px, env(safe-area-inset-right));
-  bottom: max(14px, env(safe-area-inset-bottom));
+  top: calc(max(14px, env(safe-area-inset-top)) + 70px);
   z-index: 74;
   min-height: 52px;
   border: 2px dashed #ff3df2;
@@ -254,7 +254,7 @@ h1 {
 .debug-panel {
   position: fixed;
   right: clamp(12px, 3vw, 24px);
-  bottom: clamp(78px, 12vh, 110px);
+  top: calc(max(14px, env(safe-area-inset-top)) + 132px);
   z-index: 73;
   width: min(360px, calc(100vw - 24px));
   pointer-events: none;
